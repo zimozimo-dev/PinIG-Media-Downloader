@@ -491,8 +491,8 @@
     return sendRuntimeMessage({ type: "DOWNLOAD_MEDIA", item });
   }
 
-  async function sendBatch(items) {
-    return sendRuntimeMessage({ type: "DOWNLOAD_MEDIA_BATCH", items });
+  async function sendBatch(items, context = {}) {
+    return sendRuntimeMessage({ type: "DOWNLOAD_MEDIA_BATCH", items, context });
   }
 
   function findItemForElement(element) {
@@ -594,10 +594,16 @@
       setStatus("No matching media found. Scroll the page and scan again.");
       return;
     }
-    setBusy(true, `Starting ${items.length} download${items.length === 1 ? "" : "s"}...`);
+    setBusy(true, items.length > 1 ? `Creating ZIP for ${items.length} media items...` : "Starting 1 download...");
     try {
-      const result = await sendBatch(items);
-      setBusy(false, result?.ok ? `Sent ${result.completed}/${items.length} to browser downloads.` : `Download failed: ${result?.error || "unknown error"}`);
+      const result = await sendBatch(items, {
+        platform: PLATFORM,
+        pageTitle: `${pageTitle()}-${STATE.filter}`
+      });
+      const successText = result?.mode === "zip"
+        ? `Saved ${result.completed}/${items.length} media items as one ZIP.`
+        : `Sent ${result.completed}/${items.length} to browser downloads.`;
+      setBusy(false, result?.ok ? successText : `Download failed: ${result?.error || "unknown error"}`);
     } catch (error) {
       setBusy(false, `Download failed: ${error.message}`);
     }
