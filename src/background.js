@@ -20,14 +20,15 @@ function safePart(value) {
 }
 
 function extensionFromUrl(url, type) {
+  const cleanType = String(type || "").split(";")[0].trim().toLowerCase();
+  if (MIME_EXTENSION[cleanType]) return MIME_EXTENSION[cleanType];
   try {
     const pathname = new URL(url).pathname;
     const ext = pathname.match(/\.([a-z0-9]{2,5})(?:$|[/?#])/i)?.[1];
-    if (ext) return ext.toLowerCase();
+    if (ext && /^(jpe?g|png|webp|gif|mp4|webm|mov)$/i.test(ext)) return ext.toLowerCase();
   } catch (_) {
     // Fall through to MIME-derived extension.
   }
-  const cleanType = String(type || "").split(";")[0].trim().toLowerCase();
   return MIME_EXTENSION[cleanType] || (type === "video" ? "mp4" : "jpg");
 }
 

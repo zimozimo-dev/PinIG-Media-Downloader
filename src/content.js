@@ -169,6 +169,17 @@
     }
   }
 
+  function postCodeFromUrl(url) {
+    try {
+      const parsed = new URL(url, location.href);
+      const parts = parsed.pathname.split("/").filter(Boolean);
+      const postIndex = parts.findIndex((part) => /^(p|reel|tv|pin)$/i.test(part));
+      return postIndex >= 0 ? parts[postIndex + 1] || "" : "";
+    } catch (_) {
+      return "";
+    }
+  }
+
   function canonicalPostUrl(url) {
     try {
       const parsed = new URL(url, location.href);
@@ -261,6 +272,103 @@
     return unique(found);
   }
 
+  function collectInstagramPostFromJson(root, baseUrl) {
+    const code = postCodeFromUrl(baseUrl);
+    if (!code || PLATFORM !== "instagram") return [];
+    const postTitle = titleFromPostUrl(baseUrl);
+    const matches = [];
+    const seenObjects = new WeakSet();
+
+    const objectMatchesPost = (value) => {
+      if (!value || typeof value !== "object") return false;
+      const candidates = [
+        value.shortcode,
+        value.code,
+        value.pk,
+        value.id,
+        value.url,
+        value.permalink,
+        value.link,
+        value.share_url,
+        value.canonical_url
+      ].filter(Boolean).map(String);
+      return candidates.some((candidate) => candidate === code || candidate.includes(`/p/${code}`) || candidate.includes(`/reel/${code}`) || candidate.includes(`/tv/${code}`));
+    };
+
+    const findMatchingObjects = (value) => {
+      if (!value || typeof value !== "object" || seenObjects.has(value)) return;
+      seenObjects.add(value);
+      if (objectMatchesPost(value)) matches.push(value);
+      if (Array.isArray(value)) {
+        value.forEach(findMatchingObjects);
+        return;
+      }
+      Object.values(value).forEach(findMatchingObjects);
+    };
+
+    root.querySelectorAll('script[type="application/json"], script[type="application/ld+json"], script:not([src])').forEach((script) => {
+      const text = script.textContent || "";
+      if (!text.includes(code) || !/cdninstagram|fbcdn|display_url|video_url|image_versions|carousel_media/i.test(text)) return;
+      try {
+        findMatchingObjects(JSON.parse(text));
+      } catch (_) {
+        // Instagram often embeds several non-JSON script bodies; skip them here.
+      }
+    });
+
+    const found = [];
+    const seenUrls = new Set();
+    const addUrl = (url, fallbackType = "") => {
+      const normalized = normalizeUrlWithBase(String(url || "").replace(/\\u0026/g, "&"), baseUrl);
+      if (!normalized || seenUrls.has(normalized)) return;
+      if (!/cdninstagram|fbcdn/i.test(normalized)) return;
+      if (BLOCKED_IMAGE_HINTS.some((hint) => normalized.toLowerCase().includes(hint))) return;
+      seenUrls.add(normalized);
+      found.push({
+        ...mediaItem(normalized, typeForUrl(normalized, fallbackType), null, "post-json", postTitle),
+        postUrl: baseUrl
+      });
+    };
+
+    const addCandidateList = (list, fallbackType) => {
+      if (!Array.isArray(list)) return;
+      const best = list
+        .map((candidate) => ({
+          url: candidate?.url || candidate?.src,
+          score: Number(candidate?.width || 0) * Number(candidate?.height || 0)
+        }))
+        .filter((candidate) => candidate.url)
+        .sort((a, b) => b.score - a.score)[0];
+      addUrl(best?.url, fallbackType);
+    };
+
+    const collectFromMediaNode = (node) => {
+      if (!node || typeof node !== "object") return;
+      const videoUrl = node.video_url || node.playback_url || node.playbackUrl;
+      const hasVideo = videoUrl || (Array.isArray(node.video_versions) && node.video_versions.length);
+      if (hasVideo) {
+        addCandidateList(node.video_versions, "video");
+        addUrl(videoUrl, "video");
+        return;
+      }
+      addCandidateList(node.image_versions2?.candidates, "photo");
+      addUrl(node.display_url || node.displayUrl || node.thumbnail_src || node.thumbnail_url || node.src, "photo");
+    };
+
+    const collectOrdered = (node) => {
+      if (!node || typeof node !== "object") return;
+      const carousel = node.carousel_media || node.carouselMedia || node.edge_sidecar_to_children?.edges?.map((edge) => edge.node);
+      if (Array.isArray(carousel) && carousel.length) {
+        carousel.forEach(collectFromMediaNode);
+        return;
+      }
+      collectFromMediaNode(node);
+    };
+
+    matches.forEach(collectOrdered);
+    return uniquePreserveOrder(found);
+  }
+
   function collectFromDom() {
     const items = [];
 
@@ -335,6 +443,15 @@
     return [...byUrl.values()].sort((a, b) => {
       if (a.type !== b.type) return a.type === "photo" ? -1 : 1;
       return (b.width * b.height) - (a.width * a.height);
+    });
+  }
+
+  function uniquePreserveOrder(items) {
+    const seen = new Set();
+    return items.filter((item) => {
+      if (!item.url || seen.has(item.url)) return false;
+      seen.add(item.url);
+      return true;
     });
   }
 
@@ -527,8 +644,9 @@
   }
 
   function mediaFallbackFromHost(host, postUrl) {
-    const mediaRect = host ? largestMediaRect(host) : null;
-    const elements = [...(host?.querySelectorAll?.("img, video") || [])].filter((element) => {
+    const scopedHost = currentPostHost(host) || host;
+    const mediaRect = scopedHost ? largestMediaRect(scopedHost) : null;
+    const elements = [...(scopedHost?.querySelectorAll?.("img, video") || [])].filter((element) => {
       if (!mediaRect) return true;
       return rectsForElement(element).some((rect) => rectsOverlap(rect, mediaRect));
     });
@@ -541,17 +659,37 @@
   async function mediaFromPost(anchor, host) {
     const postUrl = canonicalPostUrl(anchor.href) || normalizeUrl(anchor.href);
     if (!postUrl) return [];
+    const liveItems = collectInstagramPostFromJson(document, postUrl);
+    if (liveItems.length) return liveItems;
     try {
       const response = await fetch(postUrl, { credentials: "include" });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const html = await response.text();
       const doc = new DOMParser().parseFromString(html, "text/html");
+      const exactItems = collectInstagramPostFromJson(doc, postUrl);
+      if (exactItems.length) return exactItems;
       const items = collectMediaFromDocument(doc, postUrl, "post");
       if (items.length && items.length <= 40) return items;
     } catch (_) {
       // Some pages hide full media until opened; visible thumbnails are still useful.
     }
     return mediaFallbackFromHost(host, postUrl);
+  }
+
+  function currentPostHost(fallback = null) {
+    if (!isPostLink({ href: location.href })) return fallback;
+    const main = document.querySelector("main") || document.body;
+    const media = [...main.querySelectorAll("img, video")].filter((element) => {
+      const item = findItemForElement(element);
+      const rect = element.getBoundingClientRect();
+      return item && rect.width >= 160 && rect.height >= 160;
+    });
+    const rect = bestVisibleRect(media);
+    if (!rect) return fallback;
+    const centerX = Math.round(rect.left + rect.width / 2);
+    const centerY = Math.round(rect.top + rect.height / 2);
+    const element = document.elementFromPoint(centerX, centerY);
+    return element?.closest?.("article, main [role='presentation'], main section, main") || fallback;
   }
 
   function attachElementButtons() {
@@ -622,10 +760,29 @@
       return;
     }
 
+    const currentUrl = canonicalPostUrl(location.href);
+    const currentHost = currentPostHost();
+    const currentRect = currentUrl && currentHost ? largestMediaRect(currentHost) : null;
+    if (currentUrl && currentRect) {
+      const key = `page:${currentUrl}`;
+      seen.add(key);
+      let entry = STATE.postButtons.get(key);
+      if (!entry) {
+        const button = createPostButton(currentUrl);
+        postLayer().appendChild(button);
+        entry = { button, anchor: postAnchorForUrl(currentHost, currentUrl), host: currentHost, postUrl: currentUrl, mode: "page" };
+        STATE.postButtons.set(key, entry);
+      }
+      entry.anchor = postAnchorForUrl(currentHost, currentUrl);
+      entry.host = currentHost;
+      entry.mode = "page";
+    }
+
     document.querySelectorAll("a[href]").forEach((anchor) => {
       if (!isPostLink(anchor)) return;
       const postUrl = canonicalPostUrl(anchor.href);
       if (!postUrl) return;
+      if (currentUrl && postUrl === currentUrl) return;
       const host = postHostFor(anchor);
       if (!visiblePostRect(anchor, host)) return;
       seen.add(postUrl);
@@ -695,7 +852,7 @@
   async function downloadPostFromButton(event, postUrl) {
     event.preventDefault();
     event.stopPropagation();
-    const entry = STATE.postButtons.get(postUrl) || STATE.postButtons.get(`dialog:${postUrl}`);
+    const entry = STATE.postButtons.get(postUrl) || STATE.postButtons.get(`dialog:${postUrl}`) || STATE.postButtons.get(`page:${postUrl}`);
     if (!entry) return;
     const { button, anchor, host } = entry;
     button.disabled = true;
@@ -727,12 +884,12 @@
   function positionPostButtons() {
     STATE.postPositionFrame = 0;
     STATE.postButtons.forEach((entry, key) => {
-      if (entry.mode !== "dialog" && !entry.anchor?.isConnected) {
+      if (entry.mode !== "dialog" && entry.mode !== "page" && !entry.anchor?.isConnected) {
         entry.button.remove();
         STATE.postButtons.delete(key);
         return;
       }
-      const rect = entry.mode === "dialog" ? largestMediaRect(entry.host) : visiblePostRect(entry.anchor, entry.host);
+      const rect = entry.mode === "dialog" || entry.mode === "page" ? largestMediaRect(entry.host) : visiblePostRect(entry.anchor, entry.host);
       if (!rect) {
         entry.button.style.setProperty("display", "none", "important");
         return;
