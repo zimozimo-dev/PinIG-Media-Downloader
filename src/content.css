@@ -246,7 +246,15 @@
   transition: opacity 120ms ease, transform 120ms ease;
 }
 
+.pinig-post-layer {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483646 !important;
+  pointer-events: none !important;
+}
+
 .pinig-post-button {
+  position: fixed !important;
   left: 12px !important;
   right: auto !important;
   top: 12px !important;

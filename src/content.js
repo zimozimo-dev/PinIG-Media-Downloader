@@ -7,7 +7,10 @@
     filter: "all",
     layout: null,
     dragging: null,
-    resizing: null
+    resizing: null,
+    postButtons: new Map(),
+    postPositionFrame: 0,
+    postRefreshTimer: 0
   };
 
   const PLATFORM = location.hostname.includes("pinterest") ? "pinterest" : "instagram";
@@ -375,6 +378,33 @@
     return anchor;
   }
 
+  function visiblePostRect(anchor, host) {
+    const candidates = [anchor, host].filter(Boolean);
+    for (const element of candidates) {
+      const rect = element.getBoundingClientRect();
+      if (rect.width >= 120 && rect.height >= 120 && rect.bottom > 0 && rect.right > 0 && rect.top < window.innerHeight && rect.left < window.innerWidth) {
+        return rect;
+      }
+    }
+    return null;
+  }
+
+  function postLayer() {
+    let layer = document.querySelector(".pinig-post-layer");
+    if (!layer) {
+      layer = document.createElement("div");
+      layer.className = "pinig-post-layer";
+      Object.assign(layer.style, {
+        position: "fixed",
+        inset: "0",
+        zIndex: "2147483646",
+        pointerEvents: "none"
+      });
+      (document.body || document.documentElement).appendChild(layer);
+    }
+    return layer;
+  }
+
   function mediaFallbackFromHost(host, postUrl) {
     return unique([...host.querySelectorAll("img, video")].map((element) => {
       const item = findItemForElement(element);
@@ -433,57 +463,51 @@
   }
 
   function attachPostButtons() {
-    document.querySelectorAll("a[href]").forEach((anchor) => {
-      if (anchor.dataset.pinigPostReady === "1" || !isPostLink(anchor)) return;
-      if (!anchor.querySelector("img, video")) return;
-      const host = postHostFor(anchor);
-      const rect = host.getBoundingClientRect();
-      if (rect.width < 120 || rect.height < 120) return;
-      const style = getComputedStyle(host);
-      if (style.position === "static") host.style.position = "relative";
-      host.classList.add("pinig-post-host");
-
-      const button = document.createElement("button");
-      button.className = "pinig-post-button";
-      button.type = "button";
-      button.title = "Download this post. Carousels are saved as ZIP.";
-      button.innerHTML = '<span class="pinig-post-label">ZIP ↓</span>';
-      applyPostButtonStyles(button);
-      button.addEventListener("click", async (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        button.disabled = true;
-        button.classList.add("is-loading");
-        setStatus("Reading post media...");
-        const postUrl = normalizeUrl(anchor.href);
-        const items = await mediaFromPost(anchor, host);
-        if (!items.length) {
-          setStatus("No media found in this post.");
-        } else if (items.length === 1) {
-          const result = await sendDownload(items[0]);
-          setStatus(result?.ok ? "Sent 1 media item to downloads." : "Download failed.");
-        } else {
-          const result = await sendZip(items, {
-            platform: PLATFORM,
-            pageTitle: titleFromPostUrl(postUrl),
-            postUrl
-          });
-          setStatus(result?.ok ? `Saved ${result.completed}/${items.length} media items as ZIP.` : "ZIP download failed.");
-        }
-        button.disabled = false;
-        button.classList.remove("is-loading");
-      });
-      host.appendChild(button);
-      anchor.dataset.pinigPostReady = "1";
+    document.querySelectorAll(".pinig-post-button").forEach((button) => {
+      if (!button.closest(".pinig-post-layer")) button.remove();
     });
+
+    const seen = new Set();
+    document.querySelectorAll("a[href]").forEach((anchor) => {
+      if (!isPostLink(anchor)) return;
+      if (!anchor.querySelector("img, video")) return;
+      const postUrl = normalizeUrl(anchor.href);
+      if (!postUrl) return;
+      const host = postHostFor(anchor);
+      if (!visiblePostRect(anchor, host)) return;
+      seen.add(postUrl);
+
+      let entry = STATE.postButtons.get(postUrl);
+      if (!entry) {
+        const button = document.createElement("button");
+        button.className = "pinig-post-button";
+        button.type = "button";
+        button.title = "Download this post. Carousels are saved as ZIP.";
+        button.innerHTML = '<span class="pinig-post-label">ZIP ↓</span>';
+        applyPostButtonStyles(button);
+        button.addEventListener("click", (event) => downloadPostFromButton(event, postUrl));
+        postLayer().appendChild(button);
+        entry = { button, anchor, host, postUrl };
+        STATE.postButtons.set(postUrl, entry);
+      }
+      entry.anchor = anchor;
+      entry.host = host;
+    });
+
+    STATE.postButtons.forEach((entry, postUrl) => {
+      if (seen.has(postUrl)) return;
+      entry.button.remove();
+      STATE.postButtons.delete(postUrl);
+    });
+    schedulePostButtonPositioning();
   }
 
   function applyPostButtonStyles(button) {
     const styles = {
-      position: "absolute",
+      position: "fixed",
       zIndex: "2147483647",
-      top: "12px",
-      left: "12px",
+      top: "0",
+      left: "0",
       right: "auto",
       display: "inline-flex",
       alignItems: "center",
@@ -507,6 +531,62 @@
       appearance: "none"
     };
     Object.entries(styles).forEach(([name, value]) => button.style.setProperty(name, value, "important"));
+  }
+
+  async function downloadPostFromButton(event, postUrl) {
+    event.preventDefault();
+    event.stopPropagation();
+    const entry = STATE.postButtons.get(postUrl);
+    if (!entry) return;
+    const { button, anchor, host } = entry;
+    button.disabled = true;
+    button.classList.add("is-loading");
+    setStatus("Reading post media...");
+    const items = await mediaFromPost(anchor, host);
+    if (!items.length) {
+      setStatus("No media found in this post.");
+    } else if (items.length === 1) {
+      const result = await sendDownload(items[0]);
+      setStatus(result?.ok ? "Sent 1 media item to downloads." : "Download failed.");
+    } else {
+      const result = await sendZip(items, {
+        platform: PLATFORM,
+        pageTitle: titleFromPostUrl(postUrl),
+        postUrl
+      });
+      setStatus(result?.ok ? `Saved ${result.completed}/${items.length} media items as ZIP.` : "ZIP download failed.");
+    }
+    button.disabled = false;
+    button.classList.remove("is-loading");
+  }
+
+  function positionPostButtons() {
+    STATE.postPositionFrame = 0;
+    STATE.postButtons.forEach((entry, postUrl) => {
+      if (!entry.anchor?.isConnected) {
+        entry.button.remove();
+        STATE.postButtons.delete(postUrl);
+        return;
+      }
+      const rect = visiblePostRect(entry.anchor, entry.host);
+      if (!rect) {
+        entry.button.style.setProperty("display", "none", "important");
+        return;
+      }
+      entry.button.style.setProperty("display", "inline-flex", "important");
+      entry.button.style.setProperty("transform", `translate(${Math.round(rect.left + 12)}px, ${Math.round(rect.top + 12)}px)`, "important");
+    });
+  }
+
+  function schedulePostButtonPositioning() {
+    if (STATE.postPositionFrame) return;
+    STATE.postPositionFrame = requestAnimationFrame(positionPostButtons);
+  }
+
+  function schedulePostButtonRefresh() {
+    schedulePostButtonPositioning();
+    clearTimeout(STATE.postRefreshTimer);
+    STATE.postRefreshTimer = setTimeout(attachPostButtons, 160);
   }
 
   function attachButtons() {
@@ -739,7 +819,7 @@
   const observer = new MutationObserver((mutations) => {
     const onlyOwnChanges = mutations.every((mutation) => {
       const target = mutation.target instanceof Element ? mutation.target : mutation.target.parentElement;
-      return target?.closest(".pinig-panel, .pinig-media-button, .pinig-media-host, .pinig-post-button, .pinig-post-host");
+      return target?.closest(".pinig-panel, .pinig-media-button, .pinig-media-host, .pinig-post-button, .pinig-post-layer, .pinig-post-host");
     });
     if (onlyOwnChanges) return;
     clearTimeout(observer._timer);
@@ -749,8 +829,11 @@
   window.addEventListener("resize", () => {
     STATE.layout = normalizeLayout(STATE.layout);
     applyPanelLayout();
+    schedulePostButtonPositioning();
     saveLayoutSoon();
   });
+
+  window.addEventListener("scroll", schedulePostButtonRefresh, { passive: true });
 
   loadLayout().finally(() => {
     scan();
