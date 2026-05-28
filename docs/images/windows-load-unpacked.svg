@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720">
+  <rect width="1200" height="720" fill="#f3f6fb"/>
+  <rect x="104" y="70" width="992" height="580" rx="10" fill="#ffffff" stroke="#d8dee9"/>
+  <rect x="104" y="70" width="992" height="52" rx="10" fill="#e9eef6"/>
+  <text x="142" y="103" font-family="Arial, sans-serif" font-size="18" fill="#111827">选择文件夹</text>
+  <text x="142" y="176" font-family="Arial, sans-serif" font-size="32" font-weight="700" fill="#111827">选择 social-media-downloader-extension</text>
+  <rect x="142" y="230" width="280" height="326" rx="8" fill="#f8fafc" stroke="#d8dee9"/>
+  <text x="172" y="278" font-family="Arial, sans-serif" font-size="20" fill="#64748b">快速访问</text>
+  <text x="172" y="320" font-family="Arial, sans-serif" font-size="20" fill="#64748b">桌面</text>
+  <text x="172" y="362" font-family="Arial, sans-serif" font-size="20" fill="#64748b">下载</text>
+  <text x="172" y="404" font-family="Arial, sans-serif" font-size="20" fill="#64748b">文档</text>
+  <rect x="462" y="230" width="520" height="326" rx="8" fill="#ffffff" stroke="#d8dee9"/>
+  <rect x="502" y="288" width="430" height="58" rx="8" fill="#111827"/>
+  <text x="532" y="324" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#ffffff">social-media-downloader-extension</text>
+  <rect x="502" y="370" width="210" height="48" rx="8" fill="#f1f5f9"/>
+  <text x="532" y="401" font-family="Arial, sans-serif" font-size="18" fill="#64748b">src</text>
+  <rect x="502" y="432" width="210" height="48" rx="8" fill="#f1f5f9"/>
+  <text x="532" y="463" font-family="Arial, sans-serif" font-size="18" fill="#64748b">assets</text>
+  <rect x="804" y="580" width="178" height="50" rx="8" fill="#00f2ea"/>
+  <text x="850" y="612" font-family="Arial, sans-serif" font-size="20" font-weight="700" fill="#061017">选择文件夹</text>
+  <path d="M842 560 L748 354" fill="none" stroke="#ff0050" stroke-width="7" stroke-linecap="round"/>
+  <path d="M728 386 L748 354 L778 374" fill="none" stroke="#ff0050" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="142" y="610" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#111827">重点：选中插件根目录后，点击“选择文件夹”</text>
+</svg>

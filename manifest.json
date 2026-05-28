@@ -1,0 +1,72 @@
+{
+  "manifest_version": 3,
+  "name": "PinIG Media Downloader",
+  "version": "1.0.3",
+  "description": "Download single or all visible photos and videos from Instagram and Pinterest.",
+  "permissions": [
+    "downloads",
+    "storage",
+    "activeTab",
+    "tabs"
+  ],
+  "host_permissions": [
+    "*://*.instagram.com/*",
+    "*://*.cdninstagram.com/*",
+    "*://*.cdninstagram.net/*",
+    "*://*.fbcdn.net/*",
+    "*://*.pinterest.com/*",
+    "*://*.pinimg.com/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "icons": {
+    "16": "assets/icon16.png",
+    "32": "assets/icon32.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  },
+  "action": {
+    "default_title": "PinIG Downloader",
+    "default_popup": "src/popup.html",
+    "default_icon": {
+      "16": "assets/icon16.png",
+      "32": "assets/icon32.png",
+      "48": "assets/icon48.png",
+      "128": "assets/icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.instagram.com/*",
+        "*://*.pinterest.com/*"
+      ],
+      "js": [
+        "src/content.js"
+      ],
+      "css": [
+        "src/content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "matches": [
+        "*://*.instagram.com/*",
+        "*://*.pinterest.com/*"
+      ],
+      "resources": [
+        "assets/logo.png",
+        "src/content.css"
+      ]
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "pinig-media-downloader@example.local",
+      "strict_min_version": "109.0"
+    }
+  }
+}

@@ -1,0 +1,79 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="cardShadow" x="54" y="86" width="404" height="346" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="22" stdDeviation="18" flood-color="#010101" flood-opacity="0.20"/>
+    </filter>
+    <filter id="soft" x="108" y="98" width="296" height="306" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="12" stdDeviation="10" flood-color="#010101" flood-opacity="0.16"/>
+    </filter>
+    <style>
+      @media (prefers-reduced-motion: no-preference) {
+        .peek { animation: peek 3.2s cubic-bezier(.42,0,.2,1) infinite; transform-origin: 256px 286px; }
+        .arrow { animation: arrow 2.4s cubic-bezier(.42,0,.2,1) infinite; transform-origin: 274px 369px; }
+        .cyan { animation: cyan 2.8s ease-in-out infinite; }
+        .pink { animation: pink 2.8s ease-in-out infinite .55s; }
+        .shine { animation: shine 3.8s ease-in-out infinite; }
+      }
+      @keyframes peek {
+        0%, 100% { transform: translateY(0); }
+        42% { transform: translateY(-7px); }
+      }
+      @keyframes arrow {
+        0%, 75%, 100% { transform: translateY(0); }
+        38% { transform: translateY(9px); }
+      }
+      @keyframes cyan {
+        0%, 100% { transform: translateX(0); opacity: 1; }
+        50% { transform: translateX(-5px); opacity: .86; }
+      }
+      @keyframes pink {
+        0%, 100% { transform: translateX(0); opacity: 1; }
+        50% { transform: translateX(5px); opacity: .88; }
+      }
+      @keyframes shine {
+        0%, 100% { opacity: .2; }
+        50% { opacity: .42; }
+      }
+    </style>
+  </defs>
+
+  <rect width="512" height="512" rx="128" fill="#F7F8FA"/>
+
+  <g filter="url(#cardShadow)">
+    <path d="M92 210C92 162.504 130.504 124 178 124H334C381.496 124 420 162.504 420 210V279.5C420 299.935 403.935 316 383.5 316H128.5C108.065 316 92 299.935 92 279.5V210Z" fill="#010101"/>
+    <path class="cyan" d="M104 200C104 159.131 137.131 126 178 126H334C374.869 126 408 159.131 408 200V257C408 277.435 391.435 294 371 294H141C120.565 294 104 277.435 104 257V200Z" fill="#25F4EE"/>
+    <path class="pink" d="M128 181C128 159.461 145.461 142 167 142H343C364.539 142 382 159.461 382 181V246C382 265.33 366.33 281 347 281H163C143.67 281 128 265.33 128 246V181Z" fill="#FE2C55"/>
+    <path d="M116 184C116 146.445 146.445 116 184 116H328C365.555 116 396 146.445 396 184V250C396 270.987 378.987 288 358 288H154C133.013 288 116 270.987 116 250V184Z" fill="#FFFFFF"/>
+    <path class="shine" d="M152 143C166 132 183 126 202 126H326C345 126 362 132 375 143" stroke="#010101" stroke-opacity=".22" stroke-width="10" stroke-linecap="round"/>
+  </g>
+
+  <g class="peek" filter="url(#soft)">
+    <path d="M164 252C155.163 252 148 259.163 148 268V314C148 322.837 155.163 330 164 330H348C356.837 330 364 322.837 364 314V268C364 259.163 356.837 252 348 252H164Z" fill="#FFFFFF"/>
+    <path d="M171 251C171 218.967 196.967 193 229 193H289C321.033 193 347 218.967 347 251V269H171V251Z" fill="#010101"/>
+    <path d="M183 241C183 210.624 207.624 186 238 186H277C307.376 186 332 210.624 332 241V263C332 292.271 308.271 316 279 316H236C206.729 316 183 292.271 183 263V241Z" fill="#010101"/>
+    <path d="M204 258C204 226.52 229.52 201 261 201C292.48 201 318 226.52 318 258V274C318 305.48 292.48 331 261 331C229.52 331 204 305.48 204 274V258Z" fill="#FFFFFF"/>
+    <path d="M196 233C220.5 238 236 225.5 242 211C251.5 229.5 274.5 239.5 318 239C310 203 288 181 253 181C220.5 181 200 201 196 233Z" fill="#010101"/>
+    <path d="M189 224C182 225.5 176 233 176 244C176 255 184 262 196 262V232C195 227 193 224.8 189 224Z" fill="#010101"/>
+    <path d="M321 224C329 225 336 233 336 245C336 256 328 262 316 262V232C317 227 318.5 224.5 321 224Z" fill="#010101"/>
+    <path d="M217 259C217 264.523 213.866 269 210 269C206.134 269 203 264.523 203 259C203 253.477 206.134 249 210 249C213.866 249 217 253.477 217 259Z" fill="#010101"/>
+    <path d="M280 259C280 264.523 276.866 269 273 269C269.134 269 266 264.523 266 259C266 253.477 269.134 249 273 249C276.866 249 280 253.477 280 259Z" fill="#010101"/>
+    <path d="M240 254C233 267.5 231 276.5 237 281.5C241 284.833 247.333 285 256 282" stroke="#010101" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M257 296C266 292.5 274 295 277 303" stroke="#010101" stroke-width="13" stroke-linecap="round"/>
+    <path d="M219 237C226.5 232.5 234 232.5 241 236" stroke="#010101" stroke-width="11" stroke-linecap="round"/>
+    <path d="M266 237C273 232.5 280.5 232.5 288 236" stroke="#010101" stroke-width="11" stroke-linecap="round"/>
+    <path d="M156 280C153 262 164 249 181 254C196 258.5 203 271 200 291" fill="#FFFFFF"/>
+    <path d="M161 282C159.5 266.5 167 260 179 262C190 264 194 274 193 291" stroke="#010101" stroke-width="11" stroke-linecap="round"/>
+    <path d="M176 269V297" stroke="#010101" stroke-width="10" stroke-linecap="round"/>
+    <path d="M190 274V299" stroke="#010101" stroke-width="10" stroke-linecap="round"/>
+    <path d="M318 280C315 262 326 249 343 254C358 258.5 365 271 362 291" fill="#FFFFFF"/>
+    <path d="M323 282C321.5 266.5 329 260 341 262C352 264 356 274 355 291" stroke="#010101" stroke-width="11" stroke-linecap="round"/>
+    <path d="M338 269V297" stroke="#010101" stroke-width="10" stroke-linecap="round"/>
+    <path d="M352 274V299" stroke="#010101" stroke-width="10" stroke-linecap="round"/>
+  </g>
+
+  <g class="arrow">
+    <path d="M254 344C254 332.954 262.954 324 274 324C285.046 324 294 332.954 294 344V362L304.4 351.6C311.029 344.971 321.771 344.971 328.4 351.6C335.029 358.229 335.029 368.971 328.4 375.6L286.021 417.979C279.392 424.608 268.608 424.608 261.979 417.979L219.6 375.6C212.971 368.971 212.971 358.229 219.6 351.6C226.229 344.971 236.971 344.971 243.6 351.6L254 362V344Z" fill="#010101"/>
+    <path d="M241 350L254 363V344C254 332.954 262.954 324 274 324C277.29 324 280.394 324.795 283.132 326.203C276.443 329.506 271.85 336.398 271.85 344.36V385.2L231.17 344.52C234.77 345.34 238.17 347.14 241 350Z" fill="#25F4EE"/>
+    <path d="M307 348.5C313.63 344.32 322.49 345.12 328.4 351.6C335.029 358.229 335.029 368.971 328.4 375.6L286.021 417.979C280.19 423.81 271.099 424.512 264.492 420.083L307 377.5C315.8 368.7 315.8 357.3 307 348.5Z" fill="#FE2C55"/>
+  </g>
+</svg>

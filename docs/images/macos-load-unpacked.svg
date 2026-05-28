@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720">
+  <rect width="1200" height="720" fill="#f5f7fb"/>
+  <rect x="90" y="70" width="1020" height="580" rx="24" fill="#ffffff" stroke="#d8dee9"/>
+  <text x="132" y="148" font-family="Arial, sans-serif" font-size="34" font-weight="700" fill="#111827">选择插件文件夹</text>
+  <text x="132" y="190" font-family="Arial, sans-serif" font-size="20" fill="#526071">点击“加载已解压的扩展程序”后，选择整个插件目录</text>
+  <rect x="132" y="248" width="280" height="300" rx="16" fill="#f8fafc" stroke="#d8dee9"/>
+  <text x="164" y="296" font-family="Arial, sans-serif" font-size="20" fill="#64748b">Downloads</text>
+  <text x="164" y="338" font-family="Arial, sans-serif" font-size="20" fill="#64748b">Desktop</text>
+  <text x="164" y="380" font-family="Arial, sans-serif" font-size="20" fill="#64748b">Documents</text>
+  <rect x="454" y="248" width="520" height="300" rx="16" fill="#ffffff" stroke="#d8dee9"/>
+  <rect x="494" y="296" width="440" height="58" rx="12" fill="#111827"/>
+  <text x="530" y="332" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#ffffff">social-media-downloader-extension</text>
+  <rect x="494" y="376" width="220" height="48" rx="10" fill="#f1f5f9"/>
+  <text x="530" y="407" font-family="Arial, sans-serif" font-size="18" fill="#64748b">src</text>
+  <rect x="494" y="438" width="220" height="48" rx="10" fill="#f1f5f9"/>
+  <text x="530" y="469" font-family="Arial, sans-serif" font-size="18" fill="#64748b">assets</text>
+  <rect x="826" y="570" width="148" height="52" rx="12" fill="#00f2ea"/>
+  <text x="862" y="604" font-family="Arial, sans-serif" font-size="20" font-weight="700" fill="#061017">打开</text>
+  <path d="M865 545 L759 365" fill="none" stroke="#ff0050" stroke-width="7" stroke-linecap="round"/>
+  <path d="M743 398 L759 365 L792 381" fill="none" stroke="#ff0050" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="132" y="602" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#111827">重点：选整个文件夹，不要选 src、assets 或 zip</text>
+</svg>

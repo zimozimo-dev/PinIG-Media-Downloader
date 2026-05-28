@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720">
+  <rect width="1200" height="720" fill="#f3f6fb"/>
+  <rect x="70" y="58" width="1060" height="604" rx="10" fill="#ffffff" stroke="#d8dee9"/>
+  <rect x="70" y="58" width="1060" height="64" rx="10" fill="#e9eef6"/>
+  <rect x="110" y="78" width="700" height="28" rx="14" fill="#ffffff" stroke="#c8d0dc"/>
+  <text x="136" y="99" font-family="Arial, sans-serif" font-size="18" fill="#111827">chrome://extensions/</text>
+  <text x="108" y="184" font-family="Arial, sans-serif" font-size="34" font-weight="700" fill="#111827">扩展程序</text>
+  <rect x="842" y="158" width="210" height="48" rx="8" fill="#111827"/>
+  <text x="870" y="190" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#ffffff">开发者模式</text>
+  <rect x="1010" y="170" width="30" height="24" rx="12" fill="#00f2ea"/>
+  <circle cx="1028" cy="182" r="10" fill="#ffffff"/>
+  <rect x="108" y="270" width="302" height="62" rx="8" fill="#00f2ea"/>
+  <text x="146" y="309" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#061017">加载已解压的扩展程序</text>
+  <rect x="108" y="386" width="466" height="146" rx="12" fill="#ffffff" stroke="#d8dee9"/>
+  <rect x="132" y="410" width="64" height="64" rx="8" fill="#f5b400"/>
+  <path d="M142 472 L142 422 L164 438 L186 422 L186 472 Z" fill="#050505"/>
+  <circle cx="156" cy="454" r="9" fill="#ffffff"/>
+  <circle cx="172" cy="454" r="9" fill="#ffffff"/>
+  <circle cx="154" cy="454" r="4" fill="#050505"/>
+  <circle cx="170" cy="454" r="4" fill="#050505"/>
+  <text x="220" y="442" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#111827">PinIG Media Downloader</text>
+  <text x="220" y="476" font-family="Arial, sans-serif" font-size="18" fill="#64748b">本地开发者模式加载</text>
+  <path d="M807 214 C651 240 483 266 304 292" fill="none" stroke="#ff0050" stroke-width="7" stroke-linecap="round"/>
+  <path d="M323 272 L285 295 L326 309" fill="none" stroke="#ff0050" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
