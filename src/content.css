@@ -226,11 +226,11 @@
 
 .pinig-media-button,
 .pinig-post-button {
-  position: absolute;
-  z-index: 2147483646;
+  position: absolute !important;
+  z-index: 2147483647 !important;
   top: 10px;
   right: 10px;
-  display: inline-flex;
+  display: inline-flex !important;
   align-items: center;
   justify-content: center;
   width: 34px;
@@ -247,15 +247,20 @@
 }
 
 .pinig-post-button {
+  left: 12px !important;
+  right: auto !important;
+  top: 12px !important;
   width: 38px;
   height: 38px;
-  opacity: 0.9;
+  opacity: 0.94;
   color: #f8fafc;
   background: #0b0f19;
   border: 1px solid rgba(255, 255, 255, 0.46);
   box-shadow: 0 10px 28px rgba(2, 6, 23, 0.32), 0 0 0 3px rgba(37, 244, 238, 0.18);
   font-size: 19px;
   font-weight: 800;
+  pointer-events: auto !important;
+  visibility: visible !important;
 }
 
 .pinig-post-button::after {

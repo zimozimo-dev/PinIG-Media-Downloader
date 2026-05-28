@@ -367,7 +367,9 @@
   }
 
   function postHostFor(anchor) {
-    const host = anchor.closest("article, [role='listitem'], [data-grid-item], div") || anchor;
+    const anchorRect = anchor.getBoundingClientRect();
+    if (anchorRect.width >= 120 && anchorRect.height >= 120) return anchor;
+    const host = anchor.closest("article, [role='listitem'], [data-grid-item]") || anchor;
     const rect = host.getBoundingClientRect();
     if (rect.width >= 120 && rect.height >= 120) return host;
     return anchor;
@@ -445,7 +447,7 @@
       button.className = "pinig-post-button";
       button.type = "button";
       button.title = "Download this post. Carousels are saved as ZIP.";
-      button.textContent = "↓";
+      button.innerHTML = "<span>↓</span>";
       button.addEventListener("click", async (event) => {
         event.preventDefault();
         event.stopPropagation();
