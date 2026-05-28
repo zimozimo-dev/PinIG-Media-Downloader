@@ -118,15 +118,19 @@
       .sort((a, b) => b.score - a.score)[0]?.url || "";
   }
 
-  function normalizeUrl(url) {
+  function normalizeUrlWithBase(url, base = location.href) {
     if (!url || url.startsWith("blob:") || url.startsWith("data:")) return "";
     try {
-      const parsed = new URL(url, location.href);
+      const parsed = new URL(url, base);
       parsed.hash = "";
       return parsed.href;
     } catch (_) {
       return "";
     }
+  }
+
+  function normalizeUrl(url) {
+    return normalizeUrlWithBase(url);
   }
 
   function typeForUrl(url, fallback = "") {
@@ -149,6 +153,18 @@
     return raw.replace(/\s*[\|•-]\s*(Instagram|Pinterest).*$/i, "").trim() || PLATFORM;
   }
 
+  function titleFromPostUrl(url) {
+    try {
+      const parsed = new URL(url, location.href);
+      const parts = parsed.pathname.split("/").filter(Boolean);
+      const postIndex = parts.findIndex((part) => /^(p|reel|tv|pin)$/i.test(part));
+      const slug = postIndex >= 0 ? parts[postIndex + 1] : parts.at(-1);
+      return `${PLATFORM}-${slug || "post"}`;
+    } catch (_) {
+      return `${PLATFORM}-post`;
+    }
+  }
+
   function isUsefulImage(url, element) {
     const lower = url.toLowerCase();
     if (!IMAGE_EXT.test(lower) && !lower.includes("pinimg.com") && !lower.includes("cdninstagram")) return false;
@@ -158,17 +174,75 @@
     return true;
   }
 
-  function mediaItem(url, type, element, source = "dom") {
+  function mediaItem(url, type, element, source = "dom", title = pageTitle()) {
     return {
       id: stableId(url),
       url,
       type,
       platform: PLATFORM,
       source,
-      pageTitle: pageTitle(),
+      pageTitle: title,
       width: Math.round(element?.naturalWidth || element?.videoWidth || element?.getBoundingClientRect?.().width || 0),
       height: Math.round(element?.naturalHeight || element?.videoHeight || element?.getBoundingClientRect?.().height || 0)
     };
+  }
+
+  function collectMediaFromDocument(root, baseUrl, source = "post") {
+    const found = [];
+    const seenStrings = new Set();
+    const postTitle = titleFromPostUrl(baseUrl);
+
+    const addUrl = (url, fallbackType = "") => {
+      const normalized = normalizeUrlWithBase(String(url || "").replace(/\\u0026/g, "&"), baseUrl);
+      if (!normalized || seenStrings.has(normalized)) return;
+      if (!/cdninstagram|fbcdn|pinimg|pinterest/i.test(normalized)) return;
+      if (!VIDEO_EXT.test(normalized) && !IMAGE_EXT.test(normalized) && !/pinimg|cdninstagram|fbcdn/i.test(normalized)) return;
+      if (BLOCKED_IMAGE_HINTS.some((hint) => normalized.toLowerCase().includes(hint))) return;
+      seenStrings.add(normalized);
+      found.push({
+        ...mediaItem(normalized, typeForUrl(normalized, fallbackType), null, source, postTitle),
+        postUrl: baseUrl
+      });
+    };
+
+    const walk = (value, key = "") => {
+      if (!value) return;
+      if (typeof value === "string") {
+        if (/url|src|uri|video|image|display|playback|thumbnail/i.test(key) || /https?:\/\//.test(value)) {
+          addUrl(value, /video|playback/i.test(key) ? "video" : "photo");
+        }
+        return;
+      }
+      if (Array.isArray(value)) {
+        value.forEach((item) => walk(item, key));
+        return;
+      }
+      if (typeof value === "object") {
+        Object.entries(value).forEach(([childKey, childValue]) => walk(childValue, childKey));
+      }
+    };
+
+    root.querySelectorAll('meta[property="og:image"], meta[property="og:video"], meta[name="twitter:image"], meta[name="twitter:player:stream"]').forEach((meta) => {
+      addUrl(meta.content, /video/i.test(meta.getAttribute("property") || meta.name) ? "video" : "photo");
+    });
+
+    root.querySelectorAll("video, source, img").forEach((element) => {
+      const type = element.tagName === "VIDEO" || /video/i.test(element.type || "") ? "video" : "photo";
+      addUrl(bestFromSrcset(element.srcset) || element.currentSrc || element.src, type);
+    });
+
+    root.querySelectorAll('script[type="application/ld+json"], script:not([src])').forEach((script) => {
+      const text = script.textContent || "";
+      if (!/cdninstagram|fbcdn|pinimg|video_url|display_url|images|playbackUrl/i.test(text)) return;
+      try {
+        walk(JSON.parse(text));
+      } catch (_) {
+        const matches = text.match(/https?:\\?\/\\?\/[^"'\\\s<>]+/g) || [];
+        matches.forEach((match) => addUrl(match.replaceAll("\\/", "/")));
+      }
+    });
+
+    return unique(found);
   }
 
   function collectFromDom() {
@@ -273,6 +347,10 @@
     return api.runtime.sendMessage({ type: "DOWNLOAD_MEDIA_BATCH", items });
   }
 
+  async function sendZip(items, context) {
+    return api.runtime.sendMessage({ type: "DOWNLOAD_MEDIA_ZIP", items, context });
+  }
+
   function findItemForElement(element) {
     if (element.tagName === "VIDEO") {
       const url = normalizeUrl(element.currentSrc || element.src || element.querySelector("source[src]")?.src);
@@ -282,9 +360,47 @@
     return STATE.media.find((item) => item.url === url) || (url && mediaItem(url, "photo", element, "single"));
   }
 
-  function attachButtons() {
+  function isPostLink(anchor) {
+    const href = anchor?.href || "";
+    if (PLATFORM === "instagram") return /instagram\.com\/(p|reel|tv)\//i.test(href);
+    return /pinterest\.[^/]+\/pin\//i.test(href);
+  }
+
+  function postHostFor(anchor) {
+    const host = anchor.closest("article, [role='listitem'], [data-grid-item], div") || anchor;
+    const rect = host.getBoundingClientRect();
+    if (rect.width >= 120 && rect.height >= 120) return host;
+    return anchor;
+  }
+
+  function mediaFallbackFromHost(host, postUrl) {
+    return unique([...host.querySelectorAll("img, video")].map((element) => {
+      const item = findItemForElement(element);
+      return item ? { ...item, pageTitle: titleFromPostUrl(postUrl), postUrl, source: "post-fallback" } : null;
+    }).filter(Boolean));
+  }
+
+  async function mediaFromPost(anchor, host) {
+    const postUrl = normalizeUrl(anchor.href);
+    if (!postUrl) return [];
+    if (location.href.split("?")[0] === postUrl.split("?")[0]) return scan();
+    try {
+      const response = await fetch(postUrl, { credentials: "include" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const html = await response.text();
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const items = collectMediaFromDocument(doc, postUrl, "post");
+      if (items.length) return items;
+    } catch (_) {
+      // Some pages hide full media until opened; visible thumbnails are still useful.
+    }
+    return mediaFallbackFromHost(host, postUrl);
+  }
+
+  function attachElementButtons() {
     document.querySelectorAll("img, video").forEach((element) => {
       if (element.dataset.pinigReady === "1") return;
+      if (isPostLink(element.closest("a"))) return;
       const item = findItemForElement(element);
       if (!item) return;
       const rect = element.getBoundingClientRect();
@@ -312,6 +428,56 @@
       host.appendChild(button);
       element.dataset.pinigReady = "1";
     });
+  }
+
+  function attachPostButtons() {
+    document.querySelectorAll("a[href]").forEach((anchor) => {
+      if (anchor.dataset.pinigPostReady === "1" || !isPostLink(anchor)) return;
+      if (!anchor.querySelector("img, video")) return;
+      const host = postHostFor(anchor);
+      const rect = host.getBoundingClientRect();
+      if (rect.width < 120 || rect.height < 120) return;
+      const style = getComputedStyle(host);
+      if (style.position === "static") host.style.position = "relative";
+      host.classList.add("pinig-post-host");
+
+      const button = document.createElement("button");
+      button.className = "pinig-post-button";
+      button.type = "button";
+      button.title = "Download this post. Carousels are saved as ZIP.";
+      button.textContent = "↓";
+      button.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        button.disabled = true;
+        button.classList.add("is-loading");
+        setStatus("Reading post media...");
+        const postUrl = normalizeUrl(anchor.href);
+        const items = await mediaFromPost(anchor, host);
+        if (!items.length) {
+          setStatus("No media found in this post.");
+        } else if (items.length === 1) {
+          const result = await sendDownload(items[0]);
+          setStatus(result?.ok ? "Sent 1 media item to downloads." : "Download failed.");
+        } else {
+          const result = await sendZip(items, {
+            platform: PLATFORM,
+            pageTitle: titleFromPostUrl(postUrl),
+            postUrl
+          });
+          setStatus(result?.ok ? `Saved ${result.completed}/${items.length} media items as ZIP.` : "ZIP download failed.");
+        }
+        button.disabled = false;
+        button.classList.remove("is-loading");
+      });
+      host.appendChild(button);
+      anchor.dataset.pinigPostReady = "1";
+    });
+  }
+
+  function attachButtons() {
+    attachPostButtons();
+    attachElementButtons();
   }
 
   async function scrollAndScan() {
@@ -539,7 +705,7 @@
   const observer = new MutationObserver((mutations) => {
     const onlyOwnChanges = mutations.every((mutation) => {
       const target = mutation.target instanceof Element ? mutation.target : mutation.target.parentElement;
-      return target?.closest(".pinig-panel, .pinig-media-button, .pinig-media-host");
+      return target?.closest(".pinig-panel, .pinig-media-button, .pinig-media-host, .pinig-post-button, .pinig-post-host");
     });
     if (onlyOwnChanges) return;
     clearTimeout(observer._timer);
