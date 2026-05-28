@@ -168,6 +168,18 @@
     }
   }
 
+  function canonicalPostUrl(url) {
+    try {
+      const parsed = new URL(url, location.href);
+      parsed.hash = "";
+      parsed.search = "";
+      if (!parsed.pathname.endsWith("/")) parsed.pathname += "/";
+      return parsed.href;
+    } catch (_) {
+      return "";
+    }
+  }
+
   function isUsefulImage(url, element) {
     const lower = url.toLowerCase();
     if (!IMAGE_EXT.test(lower) && !lower.includes("pinimg.com") && !lower.includes("cdninstagram")) return false;
@@ -342,16 +354,30 @@
     return STATE.media;
   }
 
+  function sendRuntimeMessage(message) {
+    return new Promise((resolve, reject) => {
+      try {
+        api.runtime.sendMessage(message, (response) => {
+          const error = api.runtime.lastError;
+          if (error) reject(new Error(error.message));
+          else resolve(response);
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
   async function sendDownload(item) {
-    return api.runtime.sendMessage({ type: "DOWNLOAD_MEDIA", item });
+    return sendRuntimeMessage({ type: "DOWNLOAD_MEDIA", item });
   }
 
   async function sendBatch(items) {
-    return api.runtime.sendMessage({ type: "DOWNLOAD_MEDIA_BATCH", items });
+    return sendRuntimeMessage({ type: "DOWNLOAD_MEDIA_BATCH", items });
   }
 
   async function sendZip(items, context) {
-    return api.runtime.sendMessage({ type: "DOWNLOAD_MEDIA_ZIP", items, context });
+    return sendRuntimeMessage({ type: "DOWNLOAD_MEDIA_ZIP", items, context });
   }
 
   function findItemForElement(element) {
@@ -432,6 +458,38 @@
     return postRectFromAnchor(anchor, host);
   }
 
+  function activeDialog() {
+    return [...document.querySelectorAll('[role="dialog"], dialog')]
+      .filter((dialog) => {
+        const rect = dialog.getBoundingClientRect();
+        return rect.width > 320 && rect.height > 320 && rect.bottom > 0 && rect.right > 0;
+      })
+      .sort((a, b) => (b.getBoundingClientRect().width * b.getBoundingClientRect().height) - (a.getBoundingClientRect().width * a.getBoundingClientRect().height))[0] || null;
+  }
+
+  function largestMediaRect(root) {
+    const media = [...root.querySelectorAll("img, video")].filter((element) => {
+      const src = element.currentSrc || element.src || "";
+      if (BLOCKED_IMAGE_HINTS.some((hint) => src.toLowerCase().includes(hint))) return false;
+      return true;
+    });
+    return bestVisibleRect(media) || bestVisibleRect([root]);
+  }
+
+  function currentDialogPostUrl(dialog) {
+    if (isPostLink({ href: location.href })) return canonicalPostUrl(location.href);
+    const link = dialog.querySelector('a[href*="/p/"], a[href*="/reel/"], a[href*="/tv/"], a[href*="/pin/"]');
+    return canonicalPostUrl(link?.href || "");
+  }
+
+  function postAnchorForUrl(root, postUrl) {
+    return [...root.querySelectorAll("a[href]")].find((anchor) => canonicalPostUrl(anchor.href) === postUrl) || {
+      href: postUrl,
+      isConnected: true,
+      querySelectorAll: () => []
+    };
+  }
+
   function postLayer() {
     let layer = document.querySelector(".pinig-post-layer");
     if (!layer) {
@@ -449,7 +507,7 @@
   }
 
   function mediaFallbackFromHost(host, postUrl) {
-    return unique([...host.querySelectorAll("img, video")].map((element) => {
+    return unique([...(host?.querySelectorAll?.("img, video") || [])].map((element) => {
       const item = findItemForElement(element);
       return item ? { ...item, pageTitle: titleFromPostUrl(postUrl), postUrl, source: "post-fallback" } : null;
     }).filter(Boolean));
@@ -496,9 +554,15 @@
         event.preventDefault();
         event.stopPropagation();
         button.disabled = true;
-        const latest = findItemForElement(element) || item;
-        await sendDownload(latest);
-        button.disabled = false;
+        try {
+          const latest = findItemForElement(element) || item;
+          const result = await sendDownload(latest);
+          setStatus(result?.ok ? "Sent 1 media item to downloads." : `Download failed: ${result?.error || "unknown error"}`);
+        } catch (error) {
+          setStatus(`Download failed: ${error.message}`);
+        } finally {
+          button.disabled = false;
+        }
       });
       host.appendChild(button);
       element.dataset.pinigReady = "1";
@@ -511,9 +575,34 @@
     });
 
     const seen = new Set();
+    const dialog = activeDialog();
+    if (dialog) {
+      const postUrl = currentDialogPostUrl(dialog);
+      const rect = postUrl ? largestMediaRect(dialog) : null;
+      if (postUrl && rect) {
+        seen.add(`dialog:${postUrl}`);
+        let entry = STATE.postButtons.get(`dialog:${postUrl}`);
+        if (!entry) {
+          const button = createPostButton(postUrl);
+          postLayer().appendChild(button);
+          entry = { button, anchor: postAnchorForUrl(dialog, postUrl), host: dialog, postUrl, mode: "dialog" };
+          STATE.postButtons.set(`dialog:${postUrl}`, entry);
+        }
+        entry.anchor = postAnchorForUrl(dialog, postUrl);
+        entry.host = dialog;
+      }
+      STATE.postButtons.forEach((entry, key) => {
+        if (seen.has(key)) return;
+        entry.button.remove();
+        STATE.postButtons.delete(key);
+      });
+      schedulePostButtonPositioning();
+      return;
+    }
+
     document.querySelectorAll("a[href]").forEach((anchor) => {
       if (!isPostLink(anchor)) return;
-      const postUrl = normalizeUrl(anchor.href);
+      const postUrl = canonicalPostUrl(anchor.href);
       if (!postUrl) return;
       const host = postHostFor(anchor);
       if (!visiblePostRect(anchor, host)) return;
@@ -521,19 +610,14 @@
 
       let entry = STATE.postButtons.get(postUrl);
       if (!entry) {
-        const button = document.createElement("button");
-        button.className = "pinig-post-button";
-        button.type = "button";
-        button.title = "Download this post. Carousels are saved as ZIP.";
-        button.innerHTML = '<span class="pinig-post-label">ZIP ↓</span>';
-        applyPostButtonStyles(button);
-        button.addEventListener("click", (event) => downloadPostFromButton(event, postUrl));
+        const button = createPostButton(postUrl);
         postLayer().appendChild(button);
-        entry = { button, anchor, host, postUrl };
+        entry = { button, anchor, host, postUrl, mode: "grid" };
         STATE.postButtons.set(postUrl, entry);
       }
       entry.anchor = anchor;
       entry.host = host;
+      entry.mode = "grid";
     });
 
     STATE.postButtons.forEach((entry, postUrl) => {
@@ -542,6 +626,17 @@
       STATE.postButtons.delete(postUrl);
     });
     schedulePostButtonPositioning();
+  }
+
+  function createPostButton(postUrl) {
+    const button = document.createElement("button");
+    button.className = "pinig-post-button";
+    button.type = "button";
+    button.title = "Download this post. Carousels are saved as ZIP.";
+    button.innerHTML = '<span class="pinig-post-label">ZIP ↓</span>';
+    applyPostButtonStyles(button);
+    button.addEventListener("click", (event) => downloadPostFromButton(event, postUrl));
+    return button;
   }
 
   function applyPostButtonStyles(button) {
@@ -578,45 +673,52 @@
   async function downloadPostFromButton(event, postUrl) {
     event.preventDefault();
     event.stopPropagation();
-    const entry = STATE.postButtons.get(postUrl);
+    const entry = STATE.postButtons.get(postUrl) || STATE.postButtons.get(`dialog:${postUrl}`);
     if (!entry) return;
     const { button, anchor, host } = entry;
     button.disabled = true;
     button.classList.add("is-loading");
-    setStatus("Reading post media...");
-    const items = await mediaFromPost(anchor, host);
-    if (!items.length) {
-      setStatus("No media found in this post.");
-    } else if (items.length === 1) {
-      const result = await sendDownload(items[0]);
-      setStatus(result?.ok ? "Sent 1 media item to downloads." : "Download failed.");
-    } else {
-      const result = await sendZip(items, {
-        platform: PLATFORM,
-        pageTitle: titleFromPostUrl(postUrl),
-        postUrl
-      });
-      setStatus(result?.ok ? `Saved ${result.completed}/${items.length} media items as ZIP.` : "ZIP download failed.");
+    try {
+      setStatus("Reading post media...");
+      const items = await mediaFromPost(anchor, host);
+      if (!items.length) {
+        setStatus("No media found in this post.");
+      } else if (items.length === 1) {
+        const result = await sendDownload(items[0]);
+        setStatus(result?.ok ? "Sent 1 media item to downloads." : `Download failed: ${result?.error || "unknown error"}`);
+      } else {
+        const result = await sendZip(items, {
+          platform: PLATFORM,
+          pageTitle: titleFromPostUrl(postUrl),
+          postUrl
+        });
+        setStatus(result?.ok ? `Saved ${result.completed}/${items.length} media items as ZIP.` : `ZIP failed: ${result?.error || "unknown error"}`);
+      }
+    } catch (error) {
+      setStatus(`Download failed: ${error.message}`);
+    } finally {
+      button.disabled = false;
+      button.classList.remove("is-loading");
     }
-    button.disabled = false;
-    button.classList.remove("is-loading");
   }
 
   function positionPostButtons() {
     STATE.postPositionFrame = 0;
-    STATE.postButtons.forEach((entry, postUrl) => {
-      if (!entry.anchor?.isConnected) {
+    STATE.postButtons.forEach((entry, key) => {
+      if (entry.mode !== "dialog" && !entry.anchor?.isConnected) {
         entry.button.remove();
-        STATE.postButtons.delete(postUrl);
+        STATE.postButtons.delete(key);
         return;
       }
-      const rect = visiblePostRect(entry.anchor, entry.host);
+      const rect = entry.mode === "dialog" ? largestMediaRect(entry.host) : visiblePostRect(entry.anchor, entry.host);
       if (!rect) {
         entry.button.style.setProperty("display", "none", "important");
         return;
       }
       entry.button.style.setProperty("display", "inline-flex", "important");
-      entry.button.style.setProperty("transform", `translate(${Math.round(rect.left + 12)}px, ${Math.round(rect.top + 12)}px)`, "important");
+      const left = Math.round(rect.left + 12);
+      const top = Math.round(rect.bottom - 46);
+      entry.button.style.setProperty("transform", `translate(${left}px, ${top}px)`, "important");
     });
   }
 
@@ -672,8 +774,12 @@
       return;
     }
     setBusy(true, `Starting ${items.length} download${items.length === 1 ? "" : "s"}...`);
-    const result = await sendBatch(items);
-    setBusy(false, result?.ok ? `Sent ${result.completed}/${items.length} to browser downloads.` : "Download failed.");
+    try {
+      const result = await sendBatch(items);
+      setBusy(false, result?.ok ? `Sent ${result.completed}/${items.length} to browser downloads.` : `Download failed: ${result?.error || "unknown error"}`);
+    } catch (error) {
+      setBusy(false, `Download failed: ${error.message}`);
+    }
   }
 
   function renderPanel() {

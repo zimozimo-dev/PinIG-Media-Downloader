@@ -48,9 +48,23 @@ function zipFilenameFor(item, index, total) {
   return `${String(index + 1).padStart(Math.max(3, String(total).length), "0")}-${kind}-${id}.${ext}`;
 }
 
+function browserDownload(options) {
+  return new Promise((resolve, reject) => {
+    try {
+      api.downloads.download(options, (downloadId) => {
+        const error = api.runtime.lastError;
+        if (error) reject(new Error(error.message));
+        else resolve(downloadId);
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
 async function downloadItem(item, index = 0, total = 1) {
   if (!item?.url) throw new Error("Missing media URL");
-  return api.downloads.download({
+  return browserDownload({
     url: item.url,
     filename: filenameFor(item, index, total),
     conflictAction: "uniquify",
@@ -218,7 +232,7 @@ async function downloadZip(items, context = {}) {
   const downloadUrl = zipDownloadUrl(zipBytes);
   const host = safePart(context.platform || items[0]?.platform || "social");
   const page = safePart(context.pageTitle || items[0]?.pageTitle || "post");
-  const downloadId = await api.downloads.download({
+  const downloadId = await browserDownload({
     url: downloadUrl.url,
     filename: `${host}/${page}.zip`,
     conflictAction: "uniquify",
