@@ -7,12 +7,8 @@
     filter: "all",
     layout: null,
     dragging: null,
-    resizing: null,
-    postButtons: new Map(),
-    postPositionFrame: 0,
-    postRefreshTimer: 0
+    resizing: null
   };
-  const INSTANCE_ID = `pinig-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   const PLATFORM = location.hostname.includes("pinterest") ? "pinterest" : "instagram";
   const VIDEO_EXT = /\.(mp4|webm|mov)(?:$|[?#])/i;
@@ -499,10 +495,6 @@
     return sendRuntimeMessage({ type: "DOWNLOAD_MEDIA_BATCH", items });
   }
 
-  async function sendZip(items, context) {
-    return sendRuntimeMessage({ type: "DOWNLOAD_MEDIA_ZIP", items, context });
-  }
-
   function findItemForElement(element) {
     if (element.tagName === "VIDEO") {
       const url = normalizeUrl(element.currentSrc || element.src || element.querySelector("source[src]")?.src);
@@ -518,272 +510,9 @@
     return /pinterest\.[^/]+\//i.test(href) && Boolean(postCodeFromUrl(href));
   }
 
-  function postHostFor(anchor) {
-    return anchor.closest("article, [role='listitem'], [data-grid-item]") || anchor;
-  }
-
-  function isVisibleCardRect(rect) {
-    if (!rect || rect.width < 96 || rect.height < 96) return false;
-    if (rect.bottom <= 0 || rect.right <= 0 || rect.top >= window.innerHeight || rect.left >= window.innerWidth) return false;
-    const ratio = rect.width / rect.height;
-    if (ratio < 0.45 || ratio > 2.4) return false;
-    if ((rect.width * rect.height) > window.innerWidth * window.innerHeight * 0.7) return false;
-    return true;
-  }
-
-  function rectScore(rect) {
-    const visibleWidth = Math.max(0, Math.min(rect.right, window.innerWidth) - Math.max(rect.left, 0));
-    const visibleHeight = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
-    const area = visibleWidth * visibleHeight;
-    const squareBias = 1 - Math.min(0.8, Math.abs(Math.log(rect.width / rect.height)));
-    return area * squareBias;
-  }
-
-  function rectsForElement(element) {
-    if (!element?.getBoundingClientRect) return [];
-    const rects = [element.getBoundingClientRect()];
-    try {
-      rects.push(...element.getClientRects());
-    } catch (_) {
-      // Some synthetic DOM nodes do not expose client rect lists consistently.
-    }
-    return rects;
-  }
-
-  function bestVisibleRect(elements) {
-    let best = null;
-    let bestScore = 0;
-    elements.forEach((element) => {
-      rectsForElement(element).forEach((rect) => {
-        if (!isVisibleCardRect(rect)) return;
-        const score = rectScore(rect);
-        if (score > bestScore) {
-          best = rect;
-          bestScore = score;
-        }
-      });
-    });
-    return best;
-  }
-
-  function postRectFromAnchor(anchor, host) {
-    const candidates = [anchor, host].filter(Boolean);
-    let parent = anchor.parentElement;
-    for (let depth = 0; parent && depth < 7; depth += 1) {
-      candidates.push(parent);
-      parent = parent.parentElement;
-    }
-    anchor.querySelectorAll("img, video, canvas, picture, div").forEach((element) => candidates.push(element));
-    return bestVisibleRect(candidates);
-  }
-
-  function visiblePostRect(anchor, host) {
-    return postRectFromAnchor(anchor, host);
-  }
-
-  function activeDialog() {
-    return [...document.querySelectorAll('[role="dialog"], dialog')]
-      .filter((dialog) => {
-        const rect = dialog.getBoundingClientRect();
-        return rect.width > 320 && rect.height > 320 && rect.bottom > 0 && rect.right > 0;
-      })
-      .sort((a, b) => (b.getBoundingClientRect().width * b.getBoundingClientRect().height) - (a.getBoundingClientRect().width * a.getBoundingClientRect().height))[0] || null;
-  }
-
-  function largestMediaRect(root) {
-    const media = [...root.querySelectorAll("img, video")].filter((element) => {
-      const src = element.currentSrc || element.src || "";
-      if (BLOCKED_IMAGE_HINTS.some((hint) => src.toLowerCase().includes(hint))) return false;
-      return true;
-    });
-    return bestVisibleRect(media) || bestVisibleRect([root]);
-  }
-
-  function currentDialogPostUrl(dialog) {
-    if (isPostLink({ href: location.href })) return canonicalPostUrl(location.href);
-    const link = dialog.querySelector('a[href*="/p/"], a[href*="/reel/"], a[href*="/tv/"], a[href*="/pin/"]');
-    return canonicalPostUrl(link?.href || "");
-  }
-
-  function postAnchorForUrl(root, postUrl) {
-    return [...root.querySelectorAll("a[href]")].find((anchor) => canonicalPostUrl(anchor.href) === postUrl) || {
-      href: postUrl,
-      isConnected: true,
-      querySelectorAll: () => []
-    };
-  }
-
-  function postLayer() {
-    let layer = document.querySelector(`.pinig-post-layer[data-pinig-instance="${INSTANCE_ID}"]`);
-    if (!layer) {
-      layer = document.createElement("div");
-      layer.className = "pinig-post-layer";
-      layer.dataset.pinigInstance = INSTANCE_ID;
-      Object.assign(layer.style, {
-        position: "fixed",
-        inset: "0",
-        zIndex: "2147483646",
-        pointerEvents: "none"
-      });
-      (document.body || document.documentElement).appendChild(layer);
-    }
-    return layer;
-  }
-
-  function cleanupPostButtonDom() {
-    const layer = postLayer();
-    document.querySelectorAll(".pinig-post-layer").forEach((candidate) => {
-      if (candidate !== layer) candidate.remove();
-    });
-    const ownedButtons = new Set([...STATE.postButtons.values()].map((entry) => entry.button));
-    document.querySelectorAll(".pinig-post-button").forEach((button) => {
-      if (!ownedButtons.has(button)) button.remove();
-    });
-  }
-
-  function rectsOverlap(first, second) {
-    if (!first || !second) return false;
-    const width = Math.min(first.right, second.right) - Math.max(first.left, second.left);
-    const height = Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top);
-    return width > 24 && height > 24;
-  }
-
-  function horizontalOverlap(first, second) {
-    if (!first || !second) return 0;
-    return Math.max(0, Math.min(first.right, second.right) - Math.max(first.left, second.left));
-  }
-
-  function usefulMediaElements(root) {
-    return [...(root?.querySelectorAll?.("img, video") || [])].filter((element) => {
-      const item = findItemForElement(element);
-      if (!item) return false;
-      const rect = element.getBoundingClientRect();
-      if (rect.width < 120 || rect.height < 120) return false;
-      if (item.type === "photo" && !isUsefulImage(item.url, element)) return false;
-      return true;
-    });
-  }
-
-  function carouselRootFor(host) {
-    const elements = usefulMediaElements(host);
-    if (!elements.length) return host;
-    const largest = elements
-      .map((element) => ({ element, rect: element.getBoundingClientRect() }))
-      .sort((a, b) => (b.rect.width * b.rect.height) - (a.rect.width * a.rect.height))[0]?.element;
-    let node = largest?.parentElement;
-    for (let depth = 0; node && depth < 10; depth += 1) {
-      if (host && !host.contains(node)) break;
-      if (usefulMediaElements(node).length >= 2) return node;
-      if (node === host || node === document.body) break;
-      node = node.parentElement;
-    }
-    return host;
-  }
-
-  function mediaFallbackFromHost(host, postUrl) {
-    const scopedHost = currentPostHost(host) || host;
-    const carouselRoot = carouselRootFor(scopedHost);
-    const mediaRect = carouselRoot ? largestMediaRect(carouselRoot) : null;
-    const elements = usefulMediaElements(carouselRoot).filter((element) => {
-      if (!mediaRect) return true;
-      return rectsForElement(element).some((rect) => {
-        const sameColumn = horizontalOverlap(rect, mediaRect) > Math.min(rect.width, mediaRect.width) * 0.35;
-        const nearPost = rect.top < mediaRect.bottom + window.innerHeight * 1.4 && rect.bottom > mediaRect.top - window.innerHeight * 0.6;
-        return sameColumn && nearPost;
-      });
-    });
-    return uniquePreserveOrder(elements.map((element) => {
-      const item = findItemForElement(element);
-      return item ? { ...item, pageTitle: titleFromPostUrl(postUrl), postUrl, source: "post-fallback" } : null;
-    }).filter(Boolean));
-  }
-
-  function wait(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  function buttonText(button) {
-    return [
-      button.getAttribute("aria-label"),
-      button.title,
-      button.textContent
-    ].filter(Boolean).join(" ");
-  }
-
-  function isVisibleButton(button) {
-    if (!button || button.disabled) return false;
-    const rect = button.getBoundingClientRect();
-    return rect.width >= 20 && rect.height >= 20 && rect.bottom > 0 && rect.right > 0 && rect.top < window.innerHeight && rect.left < window.innerWidth;
-  }
-
-  function carouselNextButton(host) {
-    const scopedHost = currentPostHost(host) || host;
-    const root = carouselRootFor(scopedHost) || scopedHost;
-    const buttons = [...new Set([
-      ...(root?.querySelectorAll?.("button") || []),
-      ...(scopedHost?.querySelectorAll?.("button") || [])
-    ])];
-    return buttons.find((button) => isVisibleButton(button) && /(next|下一步|chevron right)/i.test(buttonText(button)));
-  }
-
-  async function collectCarouselByWalking(host, postUrl) {
-    const scopedHost = currentPostHost(host) || host;
-    if (!scopedHost) return [];
-    const byUrl = new Map();
-    let staleSteps = 0;
-
-    for (let step = 0; step < 24 && staleSteps < 2; step += 1) {
-      const before = byUrl.size;
-      mediaFallbackFromHost(scopedHost, postUrl).forEach((item) => byUrl.set(item.url, item));
-      staleSteps = byUrl.size === before ? staleSteps + 1 : 0;
-
-      const next = carouselNextButton(scopedHost);
-      if (!next) break;
-      next.click();
-      await wait(560);
-    }
-
-    mediaFallbackFromHost(scopedHost, postUrl).forEach((item) => byUrl.set(item.url, item));
-    return [...byUrl.values()];
-  }
-
-  async function mediaFromPost(anchor, host) {
-    const postUrl = canonicalPostUrl(anchor.href) || normalizeUrl(anchor.href);
-    if (!postUrl) return [];
-    const liveItems = collectInstagramPostFromJson(document, postUrl);
-    if (liveItems.length > 1) return liveItems;
-    try {
-      const response = await fetch(postUrl, { credentials: "include" });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const html = await response.text();
-      const doc = new DOMParser().parseFromString(html, "text/html");
-      const exactItems = collectInstagramPostFromJson(doc, postUrl);
-      if (exactItems.length > 1) return exactItems;
-      const items = collectMediaFromDocument(doc, postUrl, "post");
-      if (items.length > 1 && items.length <= 40) return uniquePreserveOrder(items);
-    } catch (_) {
-      // Some pages hide full media until opened; visible thumbnails are still useful.
-    }
-    const walkedItems = await collectCarouselByWalking(host, postUrl);
-    if (walkedItems.length > 1) return walkedItems;
-    if (liveItems.length === 1) return liveItems;
-    return mediaFallbackFromHost(host, postUrl);
-  }
-
-  function currentPostHost(fallback = null) {
-    if (!isPostLink({ href: location.href })) return fallback;
-    const main = document.querySelector("main") || document.body;
-    const media = [...main.querySelectorAll("img, video")].filter((element) => {
-      const item = findItemForElement(element);
-      const rect = element.getBoundingClientRect();
-      return item && rect.width >= 160 && rect.height >= 160;
-    });
-    const rect = bestVisibleRect(media);
-    if (!rect) return fallback;
-    const centerX = Math.round(rect.left + rect.width / 2);
-    const centerY = Math.round(rect.top + rect.height / 2);
-    const element = document.elementFromPoint(centerX, centerY);
-    return element?.closest?.("article, main [role='presentation'], main section, main") || fallback;
+  function cleanupLegacyZipButtons() {
+    document.querySelectorAll(".pinig-post-button, .pinig-post-layer").forEach((node) => node.remove());
+    document.querySelectorAll(".pinig-post-host").forEach((node) => node.classList.remove("pinig-post-host"));
   }
 
   function attachElementButtons() {
@@ -825,189 +554,8 @@
     });
   }
 
-  function attachPostButtons() {
-    cleanupPostButtonDom();
-
-    const seen = new Set();
-    const dialog = activeDialog();
-    if (dialog) {
-      const postUrl = currentDialogPostUrl(dialog);
-      const rect = postUrl ? largestMediaRect(dialog) : null;
-      if (postUrl && rect) {
-        seen.add(`dialog:${postUrl}`);
-        let entry = STATE.postButtons.get(`dialog:${postUrl}`);
-        if (!entry) {
-          const button = createPostButton(postUrl);
-          postLayer().appendChild(button);
-          entry = { button, anchor: postAnchorForUrl(dialog, postUrl), host: dialog, postUrl, mode: "dialog" };
-          STATE.postButtons.set(`dialog:${postUrl}`, entry);
-        }
-        entry.anchor = postAnchorForUrl(dialog, postUrl);
-        entry.host = dialog;
-      }
-      STATE.postButtons.forEach((entry, key) => {
-        if (seen.has(key)) return;
-        entry.button.remove();
-        STATE.postButtons.delete(key);
-      });
-      schedulePostButtonPositioning();
-      return;
-    }
-
-    const currentUrl = canonicalPostUrl(location.href);
-    const currentHost = currentPostHost();
-    const currentRect = currentUrl && currentHost ? largestMediaRect(currentHost) : null;
-    if (currentUrl && currentRect) {
-      const key = `page:${currentUrl}`;
-      seen.add(key);
-      let entry = STATE.postButtons.get(key);
-      if (!entry) {
-        const button = createPostButton(currentUrl);
-        postLayer().appendChild(button);
-        entry = { button, anchor: postAnchorForUrl(currentHost, currentUrl), host: currentHost, postUrl: currentUrl, mode: "page" };
-        STATE.postButtons.set(key, entry);
-      }
-      entry.anchor = postAnchorForUrl(currentHost, currentUrl);
-      entry.host = currentHost;
-      entry.mode = "page";
-    }
-
-    document.querySelectorAll("a[href]").forEach((anchor) => {
-      if (!isPostLink(anchor)) return;
-      const postUrl = canonicalPostUrl(anchor.href);
-      if (!postUrl) return;
-      if (currentUrl && postUrl === currentUrl) return;
-      const host = postHostFor(anchor);
-      if (!visiblePostRect(anchor, host)) return;
-      seen.add(postUrl);
-
-      let entry = STATE.postButtons.get(postUrl);
-      if (!entry) {
-        const button = createPostButton(postUrl);
-        postLayer().appendChild(button);
-        entry = { button, anchor, host, postUrl, mode: "grid" };
-        STATE.postButtons.set(postUrl, entry);
-      }
-      entry.anchor = anchor;
-      entry.host = host;
-      entry.mode = "grid";
-    });
-
-    STATE.postButtons.forEach((entry, postUrl) => {
-      if (seen.has(postUrl)) return;
-      entry.button.remove();
-      STATE.postButtons.delete(postUrl);
-    });
-    schedulePostButtonPositioning();
-  }
-
-  function createPostButton(postUrl) {
-    const button = document.createElement("button");
-    button.className = "pinig-post-button";
-    button.type = "button";
-    button.title = "Download this post. Carousels are saved as ZIP.";
-    button.innerHTML = '<span class="pinig-post-label">ZIP ↓</span>';
-    applyPostButtonStyles(button);
-    button.addEventListener("click", (event) => downloadPostFromButton(event, postUrl));
-    return button;
-  }
-
-  function applyPostButtonStyles(button) {
-    const styles = {
-      position: "fixed",
-      zIndex: "2147483647",
-      top: "0",
-      left: "0",
-      right: "auto",
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      width: "62px",
-      height: "34px",
-      minWidth: "62px",
-      padding: "0",
-      margin: "0",
-      border: "1px solid rgba(255,255,255,0.58)",
-      borderRadius: "999px",
-      color: "#f8fafc",
-      background: "#0b0f19",
-      boxShadow: "0 10px 28px rgba(2,6,23,0.34), 0 0 0 3px rgba(37,244,238,0.2)",
-      font: "800 13px/1 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-      letterSpacing: "0",
-      opacity: "0.98",
-      visibility: "visible",
-      pointerEvents: "auto",
-      cursor: "pointer",
-      appearance: "none"
-    };
-    Object.entries(styles).forEach(([name, value]) => button.style.setProperty(name, value, "important"));
-  }
-
-  async function downloadPostFromButton(event, postUrl) {
-    event.preventDefault();
-    event.stopPropagation();
-    const entry = STATE.postButtons.get(postUrl) || STATE.postButtons.get(`dialog:${postUrl}`) || STATE.postButtons.get(`page:${postUrl}`);
-    if (!entry) return;
-    const { button, anchor, host } = entry;
-    button.disabled = true;
-    button.classList.add("is-loading");
-    try {
-      setStatus("Reading post media...");
-      const items = await mediaFromPost(anchor, host);
-      if (!items.length) {
-        setStatus("No media found in this post.");
-      } else if (items.length === 1) {
-        const result = await sendDownload(items[0]);
-        setStatus(result?.ok ? "Sent 1 media item to downloads." : `Download failed: ${result?.error || "unknown error"}`);
-      } else {
-        const result = await sendZip(items, {
-          platform: PLATFORM,
-          pageTitle: titleFromPostUrl(postUrl),
-          postUrl
-        });
-        setStatus(result?.ok ? `Saved ${result.completed}/${items.length} media items as ZIP.` : `ZIP failed: ${result?.error || "unknown error"}`);
-      }
-    } catch (error) {
-      setStatus(`Download failed: ${error.message}`);
-    } finally {
-      button.disabled = false;
-      button.classList.remove("is-loading");
-    }
-  }
-
-  function positionPostButtons() {
-    STATE.postPositionFrame = 0;
-    STATE.postButtons.forEach((entry, key) => {
-      if (entry.mode !== "dialog" && entry.mode !== "page" && !entry.anchor?.isConnected) {
-        entry.button.remove();
-        STATE.postButtons.delete(key);
-        return;
-      }
-      const rect = entry.mode === "dialog" || entry.mode === "page" ? largestMediaRect(entry.host) : visiblePostRect(entry.anchor, entry.host);
-      if (!rect) {
-        entry.button.style.setProperty("display", "none", "important");
-        return;
-      }
-      entry.button.style.setProperty("display", "inline-flex", "important");
-      const left = Math.round(rect.left + 12);
-      const top = Math.round(rect.bottom - 46);
-      entry.button.style.setProperty("transform", `translate(${left}px, ${top}px)`, "important");
-    });
-  }
-
-  function schedulePostButtonPositioning() {
-    if (STATE.postPositionFrame) return;
-    STATE.postPositionFrame = requestAnimationFrame(positionPostButtons);
-  }
-
-  function schedulePostButtonRefresh() {
-    schedulePostButtonPositioning();
-    clearTimeout(STATE.postRefreshTimer);
-    STATE.postRefreshTimer = setTimeout(attachPostButtons, 160);
-  }
-
   function attachButtons() {
-    attachPostButtons();
+    cleanupLegacyZipButtons();
     attachElementButtons();
   }
 
@@ -1240,7 +788,7 @@
   const observer = new MutationObserver((mutations) => {
     const onlyOwnChanges = mutations.every((mutation) => {
       const target = mutation.target instanceof Element ? mutation.target : mutation.target.parentElement;
-      return target?.closest(".pinig-panel, .pinig-media-button, .pinig-media-host, .pinig-post-button, .pinig-post-layer, .pinig-post-host");
+      return target?.closest(".pinig-panel, .pinig-media-button, .pinig-media-host");
     });
     if (onlyOwnChanges) return;
     clearTimeout(observer._timer);
@@ -1250,11 +798,8 @@
   window.addEventListener("resize", () => {
     STATE.layout = normalizeLayout(STATE.layout);
     applyPanelLayout();
-    schedulePostButtonPositioning();
     saveLayoutSoon();
   });
-
-  window.addEventListener("scroll", schedulePostButtonRefresh, { passive: true });
 
   loadLayout().finally(() => {
     scan();
