@@ -250,37 +250,30 @@
   left: 12px !important;
   right: auto !important;
   top: 12px !important;
-  width: 38px;
-  height: 38px;
-  opacity: 0.94;
-  color: #f8fafc;
-  background: #0b0f19;
-  border: 1px solid rgba(255, 255, 255, 0.46);
+  width: 62px !important;
+  height: 34px !important;
+  min-width: 62px !important;
+  padding: 0 !important;
+  opacity: 0.98 !important;
+  color: #f8fafc !important;
+  background: #0b0f19 !important;
+  border: 1px solid rgba(255, 255, 255, 0.58) !important;
   box-shadow: 0 10px 28px rgba(2, 6, 23, 0.32), 0 0 0 3px rgba(37, 244, 238, 0.18);
-  font-size: 19px;
+  font-size: 13px;
   font-weight: 800;
   pointer-events: auto !important;
   visibility: visible !important;
+  appearance: none !important;
 }
 
-.pinig-post-button::after {
-  content: "ZIP";
-  position: absolute;
-  right: -8px;
-  bottom: -7px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 24px;
-  height: 17px;
-  padding: 0 4px;
-  color: #061016;
-  background: #25f4ee;
-  border-radius: 999px;
-  font-size: 9px;
-  font-weight: 850;
-  line-height: 1;
-  box-shadow: -2px 2px 0 #fe2c55;
+.pinig-post-label {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #f8fafc !important;
+  font-size: 13px !important;
+  font-weight: 850 !important;
+  line-height: 1 !important;
 }
 
 .pinig-media-host:hover > .pinig-media-button,
@@ -296,8 +289,13 @@
   cursor: wait;
 }
 
-.pinig-post-button.is-loading::after {
-  content: "...";
+.pinig-post-button.is-loading .pinig-post-label {
+  font-size: 0 !important;
+}
+
+.pinig-post-button.is-loading .pinig-post-label::after {
+  content: "..." !important;
+  font-size: 13px !important;
 }
 
 .pinig-media-button.is-video {

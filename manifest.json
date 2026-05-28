@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "PinIG Media Downloader",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Download single or all visible photos and videos from Instagram and Pinterest.",
   "permissions": [
     "downloads",

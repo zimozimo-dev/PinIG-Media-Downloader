@@ -447,7 +447,8 @@
       button.className = "pinig-post-button";
       button.type = "button";
       button.title = "Download this post. Carousels are saved as ZIP.";
-      button.innerHTML = "<span>↓</span>";
+      button.innerHTML = '<span class="pinig-post-label">ZIP ↓</span>';
+      applyPostButtonStyles(button);
       button.addEventListener("click", async (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -475,6 +476,37 @@
       host.appendChild(button);
       anchor.dataset.pinigPostReady = "1";
     });
+  }
+
+  function applyPostButtonStyles(button) {
+    const styles = {
+      position: "absolute",
+      zIndex: "2147483647",
+      top: "12px",
+      left: "12px",
+      right: "auto",
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      width: "62px",
+      height: "34px",
+      minWidth: "62px",
+      padding: "0",
+      margin: "0",
+      border: "1px solid rgba(255,255,255,0.58)",
+      borderRadius: "999px",
+      color: "#f8fafc",
+      background: "#0b0f19",
+      boxShadow: "0 10px 28px rgba(2,6,23,0.34), 0 0 0 3px rgba(37,244,238,0.2)",
+      font: "800 13px/1 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      letterSpacing: "0",
+      opacity: "0.98",
+      visibility: "visible",
+      pointerEvents: "auto",
+      cursor: "pointer",
+      appearance: "none"
+    };
+    Object.entries(styles).forEach(([name, value]) => button.style.setProperty(name, value, "important"));
   }
 
   function attachButtons() {
