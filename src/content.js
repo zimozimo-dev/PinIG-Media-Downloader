@@ -12,6 +12,7 @@
     postPositionFrame: 0,
     postRefreshTimer: 0
   };
+  const INSTANCE_ID = `pinig-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   const PLATFORM = location.hostname.includes("pinterest") ? "pinterest" : "instagram";
   const VIDEO_EXT = /\.(mp4|webm|mov)(?:$|[?#])/i;
@@ -491,10 +492,11 @@
   }
 
   function postLayer() {
-    let layer = document.querySelector(".pinig-post-layer");
+    let layer = document.querySelector(`.pinig-post-layer[data-pinig-instance="${INSTANCE_ID}"]`);
     if (!layer) {
       layer = document.createElement("div");
       layer.className = "pinig-post-layer";
+      layer.dataset.pinigInstance = INSTANCE_ID;
       Object.assign(layer.style, {
         position: "fixed",
         inset: "0",
@@ -506,17 +508,39 @@
     return layer;
   }
 
+  function cleanupPostButtonDom() {
+    const layer = postLayer();
+    document.querySelectorAll(".pinig-post-layer").forEach((candidate) => {
+      if (candidate !== layer) candidate.remove();
+    });
+    const ownedButtons = new Set([...STATE.postButtons.values()].map((entry) => entry.button));
+    document.querySelectorAll(".pinig-post-button").forEach((button) => {
+      if (!ownedButtons.has(button)) button.remove();
+    });
+  }
+
+  function rectsOverlap(first, second) {
+    if (!first || !second) return false;
+    const width = Math.min(first.right, second.right) - Math.max(first.left, second.left);
+    const height = Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top);
+    return width > 24 && height > 24;
+  }
+
   function mediaFallbackFromHost(host, postUrl) {
-    return unique([...(host?.querySelectorAll?.("img, video") || [])].map((element) => {
+    const mediaRect = host ? largestMediaRect(host) : null;
+    const elements = [...(host?.querySelectorAll?.("img, video") || [])].filter((element) => {
+      if (!mediaRect) return true;
+      return rectsForElement(element).some((rect) => rectsOverlap(rect, mediaRect));
+    });
+    return unique(elements.map((element) => {
       const item = findItemForElement(element);
       return item ? { ...item, pageTitle: titleFromPostUrl(postUrl), postUrl, source: "post-fallback" } : null;
     }).filter(Boolean));
   }
 
   async function mediaFromPost(anchor, host) {
-    const postUrl = normalizeUrl(anchor.href);
+    const postUrl = canonicalPostUrl(anchor.href) || normalizeUrl(anchor.href);
     if (!postUrl) return [];
-    if (location.href.split("?")[0] === postUrl.split("?")[0]) return scan();
     try {
       const response = await fetch(postUrl, { credentials: "include" });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -570,9 +594,7 @@
   }
 
   function attachPostButtons() {
-    document.querySelectorAll(".pinig-post-button").forEach((button) => {
-      if (!button.closest(".pinig-post-layer")) button.remove();
-    });
+    cleanupPostButtonDom();
 
     const seen = new Set();
     const dialog = activeDialog();
