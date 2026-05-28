@@ -1,4 +1,5 @@
 const api = typeof browser !== "undefined" ? browser : chrome;
+const ACTIVE_ZIP_DOWNLOADS = new Map();
 
 const MIME_EXTENSION = {
   "image/jpeg": "jpg",
@@ -251,6 +252,23 @@ async function downloadZip(items, context = {}) {
   };
 }
 
+function batchKeyFor(items, context = {}) {
+  const urls = items.map((item) => item?.url || "").filter(Boolean).join("\n");
+  return [context.platform || "", context.pageTitle || "", urls].join("\n---\n");
+}
+
+function downloadZipOnce(items, context = {}) {
+  const key = batchKeyFor(items, context);
+  if (ACTIVE_ZIP_DOWNLOADS.has(key)) {
+    return ACTIVE_ZIP_DOWNLOADS.get(key);
+  }
+  const task = downloadZip(items, context).finally(() => {
+    ACTIVE_ZIP_DOWNLOADS.delete(key);
+  });
+  ACTIVE_ZIP_DOWNLOADS.set(key, task);
+  return task;
+}
+
 api.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || typeof message.type !== "string") return false;
 
@@ -269,28 +287,31 @@ api.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === "DOWNLOAD_MEDIA_BATCH") {
     const items = Array.isArray(message.items) ? message.items : [];
     (async () => {
-      if (items.length > 1) {
-        const result = await downloadZip(items, message.context);
-        sendResponse({ ok: true, ...result });
-        return;
-      }
-      const results = [];
-      for (let index = 0; index < items.length; index += 1) {
-        try {
-          const downloadId = await downloadItem(items[index], index, items.length);
-          results.push({ ok: true, downloadId, url: items[index].url });
-          await new Promise((resolve) => setTimeout(resolve, 180));
-        } catch (error) {
-          results.push({ ok: false, error: error.message, url: items[index]?.url });
+      try {
+        if (items.length > 1) {
+          const result = await downloadZipOnce(items, message.context);
+          sendResponse({ ok: true, ...result });
+          return;
         }
+        const results = [];
+        for (let index = 0; index < items.length; index += 1) {
+          try {
+            const downloadId = await downloadItem(items[index], index, items.length);
+            results.push({ ok: true, downloadId, url: items[index].url });
+          } catch (error) {
+            results.push({ ok: false, error: error.message, url: items[index]?.url });
+          }
+        }
+        sendResponse({
+          ok: true,
+          requested: items.length,
+          completed: results.filter((r) => r.ok).length,
+          failed: results.filter((r) => !r.ok).length,
+          results
+        });
+      } catch (error) {
+        sendResponse({ ok: false, error: error.message });
       }
-      sendResponse({
-        ok: true,
-        requested: items.length,
-        completed: results.filter((r) => r.ok).length,
-        failed: results.filter((r) => !r.ok).length,
-        results
-      });
     })();
     return true;
   }

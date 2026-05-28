@@ -588,6 +588,7 @@
   }
 
   async function downloadSelected() {
+    if (STATE.busy) return;
     scan();
     const items = filteredMedia();
     if (!items.length) {
