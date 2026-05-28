@@ -370,23 +370,55 @@
   }
 
   function postHostFor(anchor) {
-    const anchorRect = anchor.getBoundingClientRect();
-    if (anchorRect.width >= 120 && anchorRect.height >= 120) return anchor;
-    const host = anchor.closest("article, [role='listitem'], [data-grid-item]") || anchor;
-    const rect = host.getBoundingClientRect();
-    if (rect.width >= 120 && rect.height >= 120) return host;
-    return anchor;
+    return anchor.closest("article, [role='listitem'], [data-grid-item]") || anchor;
+  }
+
+  function isVisibleCardRect(rect) {
+    if (!rect || rect.width < 96 || rect.height < 96) return false;
+    if (rect.bottom <= 0 || rect.right <= 0 || rect.top >= window.innerHeight || rect.left >= window.innerWidth) return false;
+    const ratio = rect.width / rect.height;
+    if (ratio < 0.45 || ratio > 2.4) return false;
+    if ((rect.width * rect.height) > window.innerWidth * window.innerHeight * 0.7) return false;
+    return true;
+  }
+
+  function rectScore(rect) {
+    const visibleWidth = Math.max(0, Math.min(rect.right, window.innerWidth) - Math.max(rect.left, 0));
+    const visibleHeight = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
+    const area = visibleWidth * visibleHeight;
+    const squareBias = 1 - Math.min(0.8, Math.abs(Math.log(rect.width / rect.height)));
+    return area * squareBias;
+  }
+
+  function bestVisibleRect(elements) {
+    let best = null;
+    let bestScore = 0;
+    elements.forEach((element) => {
+      if (!element?.getBoundingClientRect) return;
+      const rect = element.getBoundingClientRect();
+      if (!isVisibleCardRect(rect)) return;
+      const score = rectScore(rect);
+      if (score > bestScore) {
+        best = rect;
+        bestScore = score;
+      }
+    });
+    return best;
+  }
+
+  function postRectFromAnchor(anchor, host) {
+    const candidates = [anchor, host].filter(Boolean);
+    let parent = anchor.parentElement;
+    for (let depth = 0; parent && depth < 7; depth += 1) {
+      candidates.push(parent);
+      parent = parent.parentElement;
+    }
+    anchor.querySelectorAll("img, video, canvas, picture, div").forEach((element) => candidates.push(element));
+    return bestVisibleRect(candidates);
   }
 
   function visiblePostRect(anchor, host) {
-    const candidates = [anchor, host].filter(Boolean);
-    for (const element of candidates) {
-      const rect = element.getBoundingClientRect();
-      if (rect.width >= 120 && rect.height >= 120 && rect.bottom > 0 && rect.right > 0 && rect.top < window.innerHeight && rect.left < window.innerWidth) {
-        return rect;
-      }
-    }
-    return null;
+    return postRectFromAnchor(anchor, host);
   }
 
   function postLayer() {
