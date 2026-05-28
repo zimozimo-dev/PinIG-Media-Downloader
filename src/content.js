@@ -470,7 +470,6 @@
     const seen = new Set();
     document.querySelectorAll("a[href]").forEach((anchor) => {
       if (!isPostLink(anchor)) return;
-      if (!anchor.querySelector("img, video")) return;
       const postUrl = normalizeUrl(anchor.href);
       if (!postUrl) return;
       const host = postHostFor(anchor);
