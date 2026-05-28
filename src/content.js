@@ -183,6 +183,11 @@
   function canonicalPostUrl(url) {
     try {
       const parsed = new URL(url, location.href);
+      const parts = parsed.pathname.split("/").filter(Boolean);
+      const postIndex = parts.findIndex((part) => /^(p|reel|tv|pin)$/i.test(part));
+      if (postIndex >= 0 && parts[postIndex + 1]) {
+        parsed.pathname = `/${parts[postIndex]}/${parts[postIndex + 1]}/`;
+      }
       parsed.hash = "";
       parsed.search = "";
       if (!parsed.pathname.endsWith("/")) parsed.pathname += "/";
@@ -509,8 +514,8 @@
 
   function isPostLink(anchor) {
     const href = anchor?.href || "";
-    if (PLATFORM === "instagram") return /instagram\.com\/(p|reel|tv)\//i.test(href);
-    return /pinterest\.[^/]+\/pin\//i.test(href);
+    if (PLATFORM === "instagram") return /instagram\.com\//i.test(href) && Boolean(postCodeFromUrl(href));
+    return /pinterest\.[^/]+\//i.test(href) && Boolean(postCodeFromUrl(href));
   }
 
   function postHostFor(anchor) {
