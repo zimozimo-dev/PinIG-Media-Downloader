@@ -547,7 +547,7 @@
       const html = await response.text();
       const doc = new DOMParser().parseFromString(html, "text/html");
       const items = collectMediaFromDocument(doc, postUrl, "post");
-      if (items.length) return items;
+      if (items.length && items.length <= 40) return items;
     } catch (_) {
       // Some pages hide full media until opened; visible thumbnails are still useful.
     }
