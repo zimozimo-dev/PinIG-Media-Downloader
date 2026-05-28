@@ -390,18 +390,29 @@
     return area * squareBias;
   }
 
+  function rectsForElement(element) {
+    if (!element?.getBoundingClientRect) return [];
+    const rects = [element.getBoundingClientRect()];
+    try {
+      rects.push(...element.getClientRects());
+    } catch (_) {
+      // Some synthetic DOM nodes do not expose client rect lists consistently.
+    }
+    return rects;
+  }
+
   function bestVisibleRect(elements) {
     let best = null;
     let bestScore = 0;
     elements.forEach((element) => {
-      if (!element?.getBoundingClientRect) return;
-      const rect = element.getBoundingClientRect();
-      if (!isVisibleCardRect(rect)) return;
-      const score = rectScore(rect);
-      if (score > bestScore) {
-        best = rect;
-        bestScore = score;
-      }
+      rectsForElement(element).forEach((rect) => {
+        if (!isVisibleCardRect(rect)) return;
+        const score = rectScore(rect);
+        if (score > bestScore) {
+          best = rect;
+          bestScore = score;
+        }
+      });
     });
     return best;
   }
