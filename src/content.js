@@ -643,14 +643,51 @@
     return width > 24 && height > 24;
   }
 
+  function horizontalOverlap(first, second) {
+    if (!first || !second) return 0;
+    return Math.max(0, Math.min(first.right, second.right) - Math.max(first.left, second.left));
+  }
+
+  function usefulMediaElements(root) {
+    return [...(root?.querySelectorAll?.("img, video") || [])].filter((element) => {
+      const item = findItemForElement(element);
+      if (!item) return false;
+      const rect = element.getBoundingClientRect();
+      if (rect.width < 120 || rect.height < 120) return false;
+      if (item.type === "photo" && !isUsefulImage(item.url, element)) return false;
+      return true;
+    });
+  }
+
+  function carouselRootFor(host) {
+    const elements = usefulMediaElements(host);
+    if (!elements.length) return host;
+    const largest = elements
+      .map((element) => ({ element, rect: element.getBoundingClientRect() }))
+      .sort((a, b) => (b.rect.width * b.rect.height) - (a.rect.width * a.rect.height))[0]?.element;
+    let node = largest?.parentElement;
+    for (let depth = 0; node && depth < 10; depth += 1) {
+      if (host && !host.contains(node)) break;
+      if (usefulMediaElements(node).length >= 2) return node;
+      if (node === host || node === document.body) break;
+      node = node.parentElement;
+    }
+    return host;
+  }
+
   function mediaFallbackFromHost(host, postUrl) {
     const scopedHost = currentPostHost(host) || host;
-    const mediaRect = scopedHost ? largestMediaRect(scopedHost) : null;
-    const elements = [...(scopedHost?.querySelectorAll?.("img, video") || [])].filter((element) => {
+    const carouselRoot = carouselRootFor(scopedHost);
+    const mediaRect = carouselRoot ? largestMediaRect(carouselRoot) : null;
+    const elements = usefulMediaElements(carouselRoot).filter((element) => {
       if (!mediaRect) return true;
-      return rectsForElement(element).some((rect) => rectsOverlap(rect, mediaRect));
+      return rectsForElement(element).some((rect) => {
+        const sameColumn = horizontalOverlap(rect, mediaRect) > Math.min(rect.width, mediaRect.width) * 0.35;
+        const nearPost = rect.top < mediaRect.bottom + window.innerHeight * 1.4 && rect.bottom > mediaRect.top - window.innerHeight * 0.6;
+        return sameColumn && nearPost;
+      });
     });
-    return unique(elements.map((element) => {
+    return uniquePreserveOrder(elements.map((element) => {
       const item = findItemForElement(element);
       return item ? { ...item, pageTitle: titleFromPostUrl(postUrl), postUrl, source: "post-fallback" } : null;
     }).filter(Boolean));
@@ -669,7 +706,7 @@
       const exactItems = collectInstagramPostFromJson(doc, postUrl);
       if (exactItems.length) return exactItems;
       const items = collectMediaFromDocument(doc, postUrl, "post");
-      if (items.length && items.length <= 40) return items;
+      if (items.length > 1 && items.length <= 40) return uniquePreserveOrder(items);
     } catch (_) {
       // Some pages hide full media until opened; visible thumbnails are still useful.
     }
