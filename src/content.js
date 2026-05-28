@@ -693,23 +693,75 @@
     }).filter(Boolean));
   }
 
+  function wait(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function buttonText(button) {
+    return [
+      button.getAttribute("aria-label"),
+      button.title,
+      button.textContent
+    ].filter(Boolean).join(" ");
+  }
+
+  function isVisibleButton(button) {
+    if (!button || button.disabled) return false;
+    const rect = button.getBoundingClientRect();
+    return rect.width >= 20 && rect.height >= 20 && rect.bottom > 0 && rect.right > 0 && rect.top < window.innerHeight && rect.left < window.innerWidth;
+  }
+
+  function carouselNextButton(host) {
+    const scopedHost = currentPostHost(host) || host;
+    const root = carouselRootFor(scopedHost) || scopedHost;
+    const buttons = [...new Set([
+      ...(root?.querySelectorAll?.("button") || []),
+      ...(scopedHost?.querySelectorAll?.("button") || [])
+    ])];
+    return buttons.find((button) => isVisibleButton(button) && /(next|下一步|chevron right)/i.test(buttonText(button)));
+  }
+
+  async function collectCarouselByWalking(host, postUrl) {
+    const scopedHost = currentPostHost(host) || host;
+    if (!scopedHost) return [];
+    const byUrl = new Map();
+    let staleSteps = 0;
+
+    for (let step = 0; step < 24 && staleSteps < 2; step += 1) {
+      const before = byUrl.size;
+      mediaFallbackFromHost(scopedHost, postUrl).forEach((item) => byUrl.set(item.url, item));
+      staleSteps = byUrl.size === before ? staleSteps + 1 : 0;
+
+      const next = carouselNextButton(scopedHost);
+      if (!next) break;
+      next.click();
+      await wait(560);
+    }
+
+    mediaFallbackFromHost(scopedHost, postUrl).forEach((item) => byUrl.set(item.url, item));
+    return [...byUrl.values()];
+  }
+
   async function mediaFromPost(anchor, host) {
     const postUrl = canonicalPostUrl(anchor.href) || normalizeUrl(anchor.href);
     if (!postUrl) return [];
     const liveItems = collectInstagramPostFromJson(document, postUrl);
-    if (liveItems.length) return liveItems;
+    if (liveItems.length > 1) return liveItems;
     try {
       const response = await fetch(postUrl, { credentials: "include" });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const html = await response.text();
       const doc = new DOMParser().parseFromString(html, "text/html");
       const exactItems = collectInstagramPostFromJson(doc, postUrl);
-      if (exactItems.length) return exactItems;
+      if (exactItems.length > 1) return exactItems;
       const items = collectMediaFromDocument(doc, postUrl, "post");
       if (items.length > 1 && items.length <= 40) return uniquePreserveOrder(items);
     } catch (_) {
       // Some pages hide full media until opened; visible thumbnails are still useful.
     }
+    const walkedItems = await collectCarouselByWalking(host, postUrl);
+    if (walkedItems.length > 1) return walkedItems;
+    if (liveItems.length === 1) return liveItems;
     return mediaFallbackFromHost(host, postUrl);
   }
 
